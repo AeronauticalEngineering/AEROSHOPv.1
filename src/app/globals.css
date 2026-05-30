@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+  }
+}
+.bg-gray-900 {
+    background-color: #003080;
+}
+.bg-gray-50 {
+    background-color: #f1f1f1;
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Utilities defined as standard CSS classes */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-sidebar-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.admin-sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Customer storefront theme */
+.customer-theme {
+  --shop-bg: #dbe7f6;
+  --shop-surface: #ffffff;
+  --shop-surface-soft: #eef3f8;
+  --shop-border: #dbe3ee;
+  --shop-primary: #0b2f5b;
+  --shop-primary-hover: #082342;
+  --shop-primary-ring: rgba(11, 47, 91, 0.16);
+  --shop-accent: #f97316;
+  background:
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.08), transparent 30rem),
+    linear-gradient(180deg, #e6eef9 0%, var(--shop-bg) 44%, #cfddf0 100%);
+  color: #172033;
+}
+
+.customer-theme > .max-w-md {
+  min-height: 100vh;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(219, 227, 238, 0.7), 0 24px 70px rgba(15, 47, 87, 0.12);
+}
+
+.customer-theme .bg-gray-50,
+.customer-theme .bg-slate-100 {
+  background-color: var(--shop-bg);
+}
+
+.customer-theme .bg-gray-100,
+.customer-theme .bg-slate-50 {
+  background-color: var(--shop-surface-soft);
+}
+
+.customer-theme .bg-gray-900,
+.customer-theme .bg-slate-900 {
+  background-color: var(--shop-primary);
+}
+
+.customer-theme .hover\:bg-gray-800:hover,
+.customer-theme .hover\:bg-slate-800:hover {
+  background-color: var(--shop-primary-hover);
+}
+
+.customer-theme .border-gray-100,
+.customer-theme .border-slate-200 {
+  border-color: var(--shop-border);
+}
+
+.customer-theme .shadow-gray-900\/20 {
+  --tw-shadow-color: rgba(15, 47, 87, 0.22);
+}
+
+.customer-theme input:focus,
+.customer-theme textarea:focus,
+.customer-theme select:focus {
+  border-color: rgba(15, 47, 87, 0.28);
+  box-shadow: 0 0 0 3px var(--shop-primary-ring);
+}
+
+.customer-theme .fixed.bottom-0 {
+  background:
+    radial-gradient(circle at 82% 0%, rgba(249, 115, 22, 0.3), transparent 16rem),
+    linear-gradient(180deg, rgba(11, 47, 91, 0.98) 0%, #06172c 100%);
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 -18px 44px rgba(7, 24, 39, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.customer-theme .fixed.bottom-0 .text-gray-900,
+.customer-theme .fixed.bottom-0 .text-slate-900 {
+  color: #f8fafc;
+}
+
+.customer-theme .fixed.bottom-0 .text-gray-700,
+.customer-theme .fixed.bottom-0 .text-slate-700 {
+  color: #dbe7f3;
+}
+
+.customer-theme .fixed.bottom-0 .text-gray-500,
+.customer-theme .fixed.bottom-0 .text-slate-500 {
+  color: #9fb0c3;
+}
+
+.customer-theme .fixed.bottom-0 .border-gray-100,
+.customer-theme .fixed.bottom-0 .border-gray-200,
+.customer-theme .fixed.bottom-0 .border-slate-200 {
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+.customer-theme .fixed.bottom-0 .bg-gray-50,
+.customer-theme .fixed.bottom-0 .bg-slate-50 {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.customer-theme .fixed.bottom-0 .bg-gray-100,
+.customer-theme .fixed.bottom-0 .bg-slate-100 {
+  background-color: #eef4fb;
+  color: #0b2f5b;
+}
+
+.customer-theme .fixed.bottom-0 .bg-white {
+  color: #0b2f5b;
+}
+
+.customer-theme .fixed.bottom-0 .bg-white .text-gray-900,
+.customer-theme .fixed.bottom-0 .bg-white .text-slate-900 {
+  color: #0b2f5b;
+}
+
+.customer-theme .fixed.bottom-0 .bg-white .text-gray-700,
+.customer-theme .fixed.bottom-0 .bg-white .text-slate-700 {
+  color: #25476b;
+}
+
+.customer-theme .fixed.bottom-0 .bg-white .text-gray-500,
+.customer-theme .fixed.bottom-0 .bg-white .text-gray-400,
+.customer-theme .fixed.bottom-0 .bg-white .text-slate-500,
+.customer-theme .fixed.bottom-0 .bg-white .text-slate-400 {
+  color: #64748b;
+}
+
+.customer-theme .fixed.bottom-0 .hover\:bg-gray-200:hover,
+.customer-theme .fixed.bottom-0 .hover\:bg-slate-200:hover {
+  background-color: #dbeafe;
+  color: #082342;
+}
+
+.customer-theme .fixed.bottom-0 .bg-gray-900,
+.customer-theme .fixed.bottom-0 .bg-slate-900 {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(2, 8, 23, 0.22);
+}
+
+.customer-theme .fixed.bottom-0 .hover\:bg-gray-800:hover,
+.customer-theme .fixed.bottom-0 .hover\:bg-slate-800:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+}
+
+.customer-theme header.bg-gradient-to-br {
+  background:
+    radial-gradient(circle at 88% 8%, rgba(249, 115, 22, 0.32), transparent 13rem),
+    linear-gradient(135deg, #06172c 0%, #0b2f5b 58%, #0f4c81 100%);
+}
+
+.customer-theme header.bg-gradient-to-br .bg-sky-200\/50 {
+  background-color: rgba(249, 115, 22, 0.2);
+}
+
+.customer-theme header.bg-gradient-to-br > .relative > .flex:first-child .text-gray-900,
+.customer-theme header.bg-gradient-to-br > .relative > .flex:first-child .text-gray-700,
+.customer-theme header.bg-gradient-to-br > .relative > .flex:first-child .text-gray-500 {
+  color: #f8fafc;
+}
+
+.customer-theme header.bg-gradient-to-br > .relative > .flex:first-child .text-gray-400 {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.customer-theme header.bg-gradient-to-br .bg-white\/80,
+.customer-theme header.bg-gradient-to-br .bg-white\/70 {
+  background-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.customer-theme header.bg-gradient-to-br input {
+  background-color: rgba(255, 255, 255, 0.96);
+  color: #172033;
+}
+
+.customer-theme header.bg-gradient-to-br .scrollbar-hide button.bg-white {
+  color: #0b2f5b;
+  border-color: rgba(255, 255, 255, 0.82);
+  background-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 18px rgba(6, 23, 44, 0.12);
+}
+
+.customer-theme header.bg-gradient-to-br .scrollbar-hide button.bg-gray-900 {
+  color: #ffffff;
+  border-color: rgba(249, 115, 22, 0.72);
+  background: linear-gradient(135deg, #0b2f5b 0%, #0f4c81 100%);
+  box-shadow: 0 10px 22px rgba(6, 23, 44, 0.24);
+}
+
+.customer-theme header.bg-gradient-to-br .text-orange-500 {
+  color: #fb923c;
+}
+
+/* Admin surface theme: keep page chrome separate from controls/tables. */
+.admin-theme {
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.06), transparent 26rem),
+    linear-gradient(180deg, #e4edf9 0%, #d6e3f5 100%);
+  color: #0f172a;
+}
+
+.admin-theme main {
+  background: transparent;
+}
+
+.admin-theme input,
+.admin-theme select,
+.admin-theme textarea {
+  background-color: #ffffff;
+}
+
+.admin-theme input[type="date"],
+.admin-theme select {
+  color-scheme: light;
+}
+
+.admin-theme .bg-gray-50,
+.admin-theme .bg-slate-50 {
+  background-color: #f8fafc;
+}
+
+.admin-theme .bg-gray-100,
+.admin-theme .bg-slate-100 {
+  background-color: #eef2f7;
+}
+
+.admin-theme thead.bg-gray-50,
+.admin-theme thead.bg-slate-50,
+.admin-theme .bg-gray-50\/50 {
+  background-color: #f8fafc;
+}
+
+.admin-theme label .bg-gray-50,
+.admin-theme label .bg-slate-50 {
+  background-color: #ffffff;
+}
+
+.admin-theme .hover\:bg-gray-50:hover,
+.admin-theme .hover\:bg-slate-50:hover {
+  background-color: #f8fafc;
+}
+
+.admin-theme .bg-gray-900,
+.admin-theme .bg-slate-900 {
+  background-color: #0b2f5b;
+}
+
+.admin-theme .hover\:bg-gray-800:hover,
+.admin-theme .hover\:bg-slate-800:hover {
+  background-color: #082342;
+}
+
+.admin-theme .compact-order-total span:first-child,
+.admin-theme .compact-refund-summary span:first-child,
+.admin-theme .compact-refund-summary p {
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+}
+
+.admin-theme .compact-order-total span:last-child,
+.admin-theme .compact-refund-summary > div:first-child > span,
+.admin-theme .compact-refund-summary > div:last-child > span:last-child {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+
+.admin-theme .compact-refund-summary > div {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
