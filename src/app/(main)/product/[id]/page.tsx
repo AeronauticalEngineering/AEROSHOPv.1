@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { useParams } from "next/navigation";
 import { usePromotions } from "@/context/PromotionContext";
+import { fetchProductBase64Images } from "@/lib/productImages";
 
 // Local interface removed, using context type
 
@@ -25,6 +26,7 @@ export default function ProductDetailPage() {
     const { promotions } = usePromotions(); // Use global promotions
 
     const [product, setProduct] = useState<Product | null>(null);
+    const [productBase64Images, setProductBase64Images] = useState<string[]>([]);
     const [productGuide, setProductGuide] = useState<ProductGuide | null>(null);
     const [bundleProducts, setBundleProducts] = useState<Record<string, Product>>({});
     const [bundleVariantSelections, setBundleVariantSelections] = useState<Record<string, string>>({});
@@ -47,6 +49,7 @@ export default function ProductDetailPage() {
         if (!id) return;
         const fetchData = async () => {
             try {
+                setProductBase64Images([]);
                 // Prepare queries
                 const docRef = doc(db, "products", id as string);
 
@@ -57,6 +60,7 @@ export default function ProductDetailPage() {
                 if (docSnap.exists()) {
                     const productData = { id: docSnap.id, ...docSnap.data() } as Product;
                     setProduct(productData);
+                    setProductBase64Images(await fetchProductBase64Images(productData));
                     setProductGuide(null);
                     setBundleProducts({});
                     setBundleVariantSelections({});
@@ -76,13 +80,21 @@ export default function ProductDetailPage() {
 
                     // Initialize selected options
                     if (productData.hasVariants && productData.options) {
+                        const defaultVariant = productData.variants?.find(variant => variant.isDefault) || productData.variants?.[0];
                         const initialOptions: Record<string, string> = {};
                         productData.options.forEach(opt => {
-                            if (opt.values && opt.values.length > 0) {
+                            const defaultValue = defaultVariant?.attributes?.[opt.name];
+                            if (defaultValue) {
+                                initialOptions[opt.name] = defaultValue;
+                            } else if (opt.values && opt.values.length > 0) {
                                 initialOptions[opt.name] = opt.values[0];
                             }
                         });
                         setSelectedOptions(initialOptions);
+                        setCustomOptionValues({});
+                    } else {
+                        setSelectedOptions({});
+                        setCustomOptionValues({});
                     }
 
                     if (productData.productType === "bundle" && productData.bundleItems?.length) {
@@ -117,8 +129,10 @@ export default function ProductDetailPage() {
             : product.imageUrl
                 ? [product.imageUrl]
                 : [];
-        return urls.filter(Boolean);
-    }, [product]);
+        return [...urls.filter(Boolean), ...productBase64Images];
+    }, [product, productBase64Images]);
+
+    const primaryProductImage = images[0] || "";
 
     useEffect(() => {
         if (activeImageIndex >= images.length && images.length > 0) {
@@ -398,8 +412,8 @@ export default function ProductDetailPage() {
     const handleAddToCart = () => {
         if (!product || !canPurchase || !addOnsComplete || !bundleAddOnsComplete) return;
         const productForCart: Product = isBundleProduct
-            ? { ...product, price: totalUnitPrice, bundleItems: resolvedBundleItems }
-            : product;
+            ? { ...product, price: totalUnitPrice, bundleItems: resolvedBundleItems, imageUrl: primaryProductImage }
+            : { ...product, imageUrl: primaryProductImage };
         for (let i = 0; i < qty; i++) {
             addToCart(productForCart, activeVariant || undefined, selectedAddOns);
         }

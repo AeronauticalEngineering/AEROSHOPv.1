@@ -109,12 +109,10 @@ const getCustomerIssueCount = (order: Order) => {
 
 const getOrderLineName = (order: Order) => order.lineDisplayName || order.linename || "";
 
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function AdminOrdersPage() {
-    const searchParams = useSearchParams();
     const router = useRouter();
-    const orderIdParam = searchParams.get('orderId');
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -143,22 +141,8 @@ export default function AdminOrdersPage() {
     const [issueReplyError, setIssueReplyError] = useState("");
     const [savingIssueReply, setSavingIssueReply] = useState(false);
 
-    // Auto-select order from URL
-    useEffect(() => {
-        if (orderIdParam && orders.length > 0) {
-            const targetOrder = orders.find(o => o.id === orderIdParam);
-            if (targetOrder) {
-                setSelectedOrder(targetOrder);
-            }
-        }
-    }, [orderIdParam, orders]);
-
     const handleCloseModal = () => {
         setSelectedOrder(null);
-        // Remove query param
-        const newParams = new URLSearchParams(searchParams.toString());
-        newParams.delete('orderId');
-        router.replace(`?${newParams.toString()}`);
     };
 
     useEffect(() => {
@@ -640,7 +624,7 @@ export default function AdminOrdersPage() {
                                     <div
                                         key={order.id}
                                         className="grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors"
-                                        onClick={() => setSelectedOrder(order)}
+                                        onClick={() => router.push(`/orders/${order.id}`)}
                                     >
                                         {/* Order ID */}
                                         <div className="col-span-6 md:col-span-2">
@@ -684,7 +668,7 @@ export default function AdminOrdersPage() {
                                         {/* Actions */}
                                         <div className="col-span-3 md:col-span-2 flex items-center justify-end gap-1">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
+                                                onClick={(e) => { e.stopPropagation(); router.push(`/orders/${order.id}`); }}
                                                 className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
                                             >
                                                 <Eye size={14} />

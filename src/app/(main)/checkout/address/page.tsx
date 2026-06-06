@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, MapPin, User, Phone, Book, CreditCard } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface SavedAddress {
@@ -70,13 +70,19 @@ export default function CheckoutAddressPage() {
             }
 
             if (saved) {
-                const parsed = JSON.parse(saved);
-                parsed.linename = parsed.linename || parsed.lineName || profileName;
-                parsed.name = parsed.name || "";
-                if (location && !parsed.address) {
-                    parsed.address = location.address;
+                try {
+                    const parsed = JSON.parse(saved);
+                    parsed.linename = parsed.linename || parsed.lineName || profileName;
+                    parsed.name = parsed.name || "";
+                    parsed.phone = String(parsed.phone || "").replace(/\D/g, "").slice(0, 10);
+                    parsed.citizenId = String(parsed.citizenId || "").replace(/\D/g, "").slice(0, 13);
+                    if (location && !parsed.address) {
+                        parsed.address = location.address;
+                    }
+                    setFormData(parsed);
+                } catch {
+                    sessionStorage.removeItem('checkout_address');
                 }
-                setFormData(parsed);
             } else if (profileName) {
                 setFormData(prev => ({
                     ...prev,
@@ -141,6 +147,9 @@ export default function CheckoutAddressPage() {
             ...formData,
             linename: formData.linename.trim(),
             name: formData.name.trim(),
+            phone: formData.phone.trim(),
+            citizenId: formData.citizenId.trim(),
+            address: formData.address.trim(),
             saveToBook
         };
         sessionStorage.setItem('checkout_address', JSON.stringify(sessionData));
@@ -154,6 +163,7 @@ export default function CheckoutAddressPage() {
                     const isDuplicate = savedAddresses.some(addr =>
                         addr.name.trim() === formData.name.trim() &&
                         addr.phone.trim() === formData.phone.trim() &&
+                        (addr.citizenId || "").trim() === formData.citizenId.trim() &&
                         addr.address.trim() === formData.address.trim()
                     );
 
@@ -168,9 +178,16 @@ export default function CheckoutAddressPage() {
                             usedAt: new Date().toISOString()
                         };
 
-                        await updateDoc(customerRef, {
-                            addressHistory: arrayUnion(addressEntry)
-                        });
+                        await setDoc(customerRef, {
+                            id: customerId,
+                            name: formData.name.trim(),
+                            linename: formData.linename.trim() || null,
+                            phone: formData.phone.trim(),
+                            citizenId: formData.citizenId.trim() || null,
+                            address: formData.address.trim(),
+                            addressHistory: arrayUnion(addressEntry),
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
                     }
                 } catch (err) {
                     console.error("Error saving address history:", err);

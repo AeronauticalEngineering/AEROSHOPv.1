@@ -9,6 +9,7 @@ import { Product, ProductGuide } from "@/types/product";
 import { ProductCategory } from "@/types/category";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { fetchProductBase64ImageItems, getPrimaryProductImage, type ProductBase64Image } from "@/lib/productImages";
 
 // --- Schema Validation ---
 const productSchema = z.object({
@@ -41,6 +42,7 @@ const productSchema = z.object({
         price: z.preprocess((val) => Number(val) || 0, z.number().min(0)),
         stock: z.preprocess((val) => Number(val) || 0, z.number().min(0)),
         sku: z.string().optional(),
+        isDefault: z.boolean().optional().default(false),
         attributes: z.any()
     })).default([]),
     bundleItems: z.array(z.object({
@@ -70,6 +72,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function AdminProductsPage() {
     const [products, setProducts] = useState<Product[]>([]);
+    const [productBase64Images, setProductBase64Images] = useState<Record<string, ProductBase64Image[]>>({});
     const [categories, setCategories] = useState<ProductCategory[]>([]);
     const [productGuides, setProductGuides] = useState<ProductGuide[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +85,8 @@ export default function AdminProductsPage() {
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [imageFileError, setImageFileError] = useState("");
+    const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+    const [variantDefaultStock, setVariantDefaultStock] = useState(0);
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
     const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
@@ -168,6 +173,36 @@ export default function AdminProductsPage() {
     }, []);
 
     useEffect(() => {
+        let isCancelled = false;
+        const loadBase64Images = async () => {
+            const productsWithBase64 = products.filter((product) => product.imageBase64Ids?.length);
+            if (productsWithBase64.length === 0) {
+                setProductBase64Images({});
+                return;
+            }
+
+            const entries = await Promise.all(
+                productsWithBase64.map(async (product) => [
+                    product.id,
+                    await fetchProductBase64ImageItems(product)
+                ] as const)
+            );
+
+            if (!isCancelled) {
+                setProductBase64Images(Object.fromEntries(entries));
+            }
+        };
+
+        loadBase64Images().catch((error) => {
+            console.error("Error loading product base64 images:", error);
+        });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [products]);
+
+    useEffect(() => {
         const q = query(collection(db, "product_guides"), orderBy("updatedAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const items = snapshot.docs.map(doc => ({
@@ -211,7 +246,7 @@ export default function AdminProductsPage() {
         const basePrice = getValues("price") || 0;
         const existingVariants = getValues("variants") || [];
 
-        const newVariants = combinations.map(combo => {
+        const generatedVariants = combinations.map(combo => {
             const attributes: Record<string, string> = {};
             validOptions.forEach((opt, index) => {
                 attributes[opt.name] = combo[index];
@@ -225,14 +260,29 @@ export default function AdminProductsPage() {
             );
 
             if (match) {
-                return { ...match, name, attributes };
+                return { ...match, name, attributes, isDefault: Boolean(match.isDefault) };
             }
 
             const sku = `SKU-${combo.map(c => c.substring(0, 2).toUpperCase()).join('-')}-${Date.now().toString(36).slice(-4)}`;
-            return { id: generateId(), name, price: basePrice, stock: 0, sku, attributes };
+            return { id: generateId(), name, price: basePrice, stock: variantDefaultStock, sku, isDefault: false, attributes };
         });
+        const hasDefaultVariant = generatedVariants.some((variant) => variant.isDefault);
+        const newVariants = generatedVariants.map((variant, index) => ({
+            ...variant,
+            isDefault: hasDefaultVariant ? Boolean(variant.isDefault) : index === 0
+        }));
 
         replaceVariants(newVariants);
+    };
+
+    const applyVariantDefaults = () => {
+        const variants = getValues("variants") || [];
+        const basePrice = Number(getValues("price")) || 0;
+        setValue("variants", variants.map((variant) => ({
+            ...variant,
+            price: basePrice,
+            stock: variantDefaultStock
+        })), { shouldDirty: true });
     };
 
     const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
@@ -290,6 +340,31 @@ export default function AdminProductsPage() {
         imagePreviews.forEach((url) => URL.revokeObjectURL(url));
         setImageFiles(nextFiles);
         setImagePreviews(nextFiles.map((file) => URL.createObjectURL(file)));
+    };
+
+    const removeSavedBase64Image = async (imageId: string) => {
+        if (!editingProduct || deletingImageId) return;
+        const nextImageIds = (editingProduct.imageBase64Ids || []).filter((id) => id !== imageId);
+
+        try {
+            setDeletingImageId(imageId);
+            await deleteDoc(doc(db, "product_images", imageId));
+            await updateDoc(doc(db, "products", editingProduct.id), {
+                imageBase64Ids: nextImageIds,
+                updatedAt: serverTimestamp()
+            });
+
+            setEditingProduct({ ...editingProduct, imageBase64Ids: nextImageIds });
+            setProductBase64Images((prev) => ({
+                ...prev,
+                [editingProduct.id]: (prev[editingProduct.id] || []).filter((image) => image.id !== imageId)
+            }));
+        } catch (error) {
+            console.error("Error deleting product image:", error);
+            alert("เกิดข้อผิดพลาดในการลบรูปภาพ");
+        } finally {
+            setDeletingImageId(null);
+        }
     };
 
     const fileToBase64 = (file: File) =>
@@ -374,11 +449,14 @@ export default function AdminProductsPage() {
             values: Array.from(new Set((option.values || []).map(value => value.trim()).filter(Boolean))),
             allowCustom: Boolean(option.allowCustom)
         }));
-        const normalizedVariants = (data.variants || []).map((variant) => ({
+        const selectedDefaultVariantIndex = (data.variants || []).findIndex((variant) => variant.isDefault);
+        const effectiveDefaultVariantIndex = selectedDefaultVariantIndex >= 0 ? selectedDefaultVariantIndex : 0;
+        const normalizedVariants = (data.variants || []).map((variant, index) => ({
             ...variant,
             sku: (variant.sku || "").trim(),
             price: Number(variant.price) || 0,
-            stock: Number(variant.stock) || 0
+            stock: Number(variant.stock) || 0,
+            isDefault: index === effectiveDefaultVariantIndex
         }));
         const normalizedAddOns = (data.addOns || [])
             .map((addOn) => ({
@@ -516,6 +594,8 @@ export default function AdminProductsPage() {
     const openEditModal = (product: Product) => {
         setEditingProduct(product);
         clearImageSelection();
+        const defaultVariant = product.variants?.find((variant) => variant.isDefault) || product.variants?.[0];
+        setVariantDefaultStock(Number(defaultVariant?.stock) || 0);
         reset({
             sku: product.sku || "",
             name: product.name,
@@ -558,6 +638,7 @@ export default function AdminProductsPage() {
         setIsModalOpen(false);
         setEditingProduct(null);
         clearImageSelection();
+        setVariantDefaultStock(0);
         reset({ sku: '', isActive: true, productType: 'single', stock: 0, price: 0, name: '', description: '', guideId: '', guideTitle: '', guideText: '', guideImageBase64: '', guideImageName: '', category: '', imageUrls: [], hasVariants: false, options: [], variants: [], bundleItems: [], addOns: [] });
     };
 
@@ -575,6 +656,29 @@ export default function AdminProductsPage() {
         const currentCategory = editingProduct?.category?.trim();
         return Array.from(new Set(currentCategory ? [...activeNames, currentCategory] : activeNames));
     }, [categories, editingProduct]);
+
+    const savedBase64Images = editingProduct ? productBase64Images[editingProduct.id] || [] : [];
+
+    const getProductDisplayStock = useCallback((product: Product) => {
+        if (product.productType !== "bundle" || !product.bundleItems?.length) {
+            return Number(product.stock) || 0;
+        }
+
+        const bundleStocks = product.bundleItems.map((item) => {
+            const childProduct = products.find((candidate) => candidate.id === item.productId);
+            if (!childProduct) return 0;
+
+            const childStock = childProduct.hasVariants
+                ? item.variantId
+                    ? childProduct.variants?.find((variant) => variant.id === item.variantId)?.stock || 0
+                    : childProduct.stock || 0
+                : childProduct.stock || 0;
+
+            return Math.floor((Number(childStock) || 0) / Math.max(1, Number(item.quantity) || 1));
+        });
+
+        return bundleStocks.length ? Math.min(...bundleStocks) : 0;
+    }, [products]);
 
     const filteredProducts = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -599,8 +703,11 @@ export default function AdminProductsPage() {
         const activeProducts = products.filter((product) => product.isActive).length;
         const variantProducts = products.filter((product) => product.hasVariants).length;
         const bundleProducts = products.filter((product) => product.productType === "bundle").length;
-        const outOfStock = products.filter((product) => product.stock === 0).length;
-        const lowStock = products.filter((product) => product.stock > 0 && product.stock <= 5).length;
+        const outOfStock = products.filter((product) => getProductDisplayStock(product) === 0).length;
+        const lowStock = products.filter((product) => {
+            const stock = getProductDisplayStock(product);
+            return stock > 0 && stock <= 5;
+        }).length;
 
         return {
             total: products.length,
@@ -611,7 +718,7 @@ export default function AdminProductsPage() {
             outOfStock,
             lowStock
         };
-    }, [products]);
+    }, [getProductDisplayStock, products]);
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -734,7 +841,10 @@ export default function AdminProductsPage() {
 
                         {/* Table Body */}
                         <div className="divide-y divide-gray-50">
-                            {paginatedProducts.map((product) => (
+                            {paginatedProducts.map((product) => {
+                                const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]?.map((image) => image.base64));
+                                const displayStock = getProductDisplayStock(product);
+                                return (
                                 <div
                                     key={product.id}
                                     onClick={() => openEditModal(product)}
@@ -743,8 +853,8 @@ export default function AdminProductsPage() {
                                     {/* Product Info */}
                                     <div className="col-span-8 md:col-span-4 flex items-center gap-3">
                                         <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200">
-                                            {(product.imageUrls?.[0] || product.imageUrl) ? (
-                                                <img src={product.imageUrls?.[0] || product.imageUrl} alt="" className="w-full h-full object-cover" />
+                                            {primaryImage ? (
+                                                <img src={primaryImage} alt="" className="w-full h-full object-cover" />
                                             ) : (
                                                 <ImageIcon size={16} className="text-gray-400" />
                                             )}
@@ -781,8 +891,8 @@ export default function AdminProductsPage() {
 
                                     {/* Stock */}
                                     <div className="hidden md:block col-span-2 text-center">
-                                        <span className={`font-bold text-sm ${product.stock === 0 ? 'text-red-500' : 'text-gray-900'}`}>
-                                            {product.stock}
+                                        <span className={`font-bold text-sm ${displayStock === 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                                            {displayStock.toLocaleString()}{product.productType === "bundle" ? " เซต" : ""}
                                         </span>
                                     </div>
 
@@ -810,10 +920,11 @@ export default function AdminProductsPage() {
                                         {product.sku && <span className="font-mono">รหัส: {product.sku}</span>}
                                         <span>{product.category}</span>
                                         <span className="font-bold text-gray-900">฿{product.price.toLocaleString()}</span>
-                                        <span>สต็อก: {product.stock}</span>
+                                        <span>สต็อก: {displayStock.toLocaleString()}{product.productType === "bundle" ? " เซต" : ""}</span>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Pagination */}
@@ -988,6 +1099,31 @@ export default function AdminProductsPage() {
                                                         )}
                                                     </div>
                                                     {imageFileError && <p className="text-[11px] text-red-500 mt-1">{imageFileError}</p>}
+                                                    {savedBase64Images.length > 0 && (
+                                                        <div className="mt-3">
+                                                            <p className="mb-1 text-[11px] font-semibold text-gray-500">รูปที่อัปโหลดแล้ว</p>
+                                                            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                                                                {savedBase64Images.map((image) => (
+                                                                    <div key={image.id} className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                                                        <img src={image.base64} alt="" className="h-14 w-full object-cover" />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => removeSavedBase64Image(image.id)}
+                                                                            disabled={deletingImageId === image.id}
+                                                                            className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:text-red-500 disabled:opacity-50"
+                                                                            aria-label="ลบรูปภาพ"
+                                                                        >
+                                                                            {deletingImageId === image.id ? (
+                                                                                <Loader2 size={12} className="animate-spin" />
+                                                                            ) : (
+                                                                                <X size={12} />
+                                                                            )}
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     {imagePreviews.length > 0 && (
                                                         <div className="mt-3 grid grid-cols-4 gap-2">
                                                             {imagePreviews.map((src, index) => (
@@ -1181,21 +1317,6 @@ export default function AdminProductsPage() {
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-4">
-                                                        {/* Base Price */}
-                                                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                                                            <div className="flex items-center justify-between">
-                                                                <div>
-                                                                    <label className="block text-xs font-semibold text-blue-700 mb-1">ราคาพื้นฐาน (บาท)</label>
-                                                                    <p className="text-xs text-blue-500">ใช้เป็นราคาตั้งต้นสำหรับทุกแบบ</p>
-                                                                </div>
-                                                                <input
-                                                                    type="number"
-                                                                    {...register("price")}
-                                                                    className="w-32 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm text-gray-900 font-medium text-right focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                                                                />
-                                                            </div>
-                                                        </div>
-
                                                         {/* Options Header */}
                                                         <div className="flex items-center justify-between">
                                                             <div>
@@ -1278,7 +1399,7 @@ export default function AdminProductsPage() {
 
                                                         {/* Variants Table */}
                                                         <div className="mt-4 pt-4 border-t border-gray-200">
-                                                            <div className="flex items-center justify-between mb-3">
+                                                            <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
                                                                 <div>
                                                                     <p className="text-sm font-semibold text-gray-900">รายการสินค้าทั้งหมด</p>
                                                                     <p className="text-xs text-gray-400">
@@ -1287,6 +1408,35 @@ export default function AdminProductsPage() {
                                                                             : 'กรุณาเพิ่มตัวเลือกและค่าด้านบนก่อน'
                                                                         }
                                                                     </p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={applyVariantDefaults}
+                                                                    disabled={variantFields.length === 0}
+                                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-500 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                                    aria-label="ใช้ค่าเริ่มต้นกับทุกแบบสินค้า"
+                                                                >
+                                                                    <CheckCircle size={18} />
+                                                                </button>
+                                                                <div>
+                                                                    <label className="mb-1 block text-[11px] font-semibold text-gray-500">ราคาเริ่มต้น</label>
+                                                                    <div className="flex w-28 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5">
+                                                                        <span className="text-xs text-gray-400">฿</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            {...register("price")}
+                                                                            className="w-full bg-transparent text-right text-sm font-semibold text-gray-900 outline-none"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="mb-1 block text-[11px] font-semibold text-gray-500">จำนวนเริ่มต้น</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={variantDefaultStock}
+                                                                        onChange={(event) => setVariantDefaultStock(Number(event.target.value) || 0)}
+                                                                        className="w-28 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-center text-sm font-bold text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
+                                                                    />
                                                                 </div>
                                                             </div>
 

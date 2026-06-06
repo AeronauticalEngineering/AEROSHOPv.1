@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { Promotion, usePromotions } from "@/context/PromotionContext";
 import { useCoupons } from "@/hooks/useCoupons";
+import { fetchProductBase64Images, getPrimaryProductImage } from "@/lib/productImages";
 
 const formatImageUrl = (url?: string) => {
     const value = url?.trim();
@@ -36,6 +37,7 @@ const ALL_CATEGORY = "ทั้งหมด";
 
 export default function ShopHome() {
     const [products, setProducts] = useState<Product[]>([]);
+    const [productBase64Images, setProductBase64Images] = useState<Record<string, string[]>>({});
     const [categoryDocs, setCategoryDocs] = useState<ProductCategory[]>([]);
     const { promotions } = usePromotions();
     const [loading, setLoading] = useState(true);
@@ -110,6 +112,36 @@ export default function ShopHome() {
     useEffect(() => {
         fetchProducts();
     }, [fetchProducts]);
+
+    useEffect(() => {
+        let isCancelled = false;
+        const loadBase64Images = async () => {
+            const productsWithBase64 = products.filter((product) => product.imageBase64Ids?.length);
+            if (productsWithBase64.length === 0) {
+                setProductBase64Images({});
+                return;
+            }
+
+            const entries = await Promise.all(
+                productsWithBase64.map(async (product) => [
+                    product.id,
+                    await fetchProductBase64Images(product)
+                ] as const)
+            );
+
+            if (!isCancelled) {
+                setProductBase64Images(Object.fromEntries(entries));
+            }
+        };
+
+        loadBase64Images().catch((error) => {
+            console.error("Error loading product base64 images:", error);
+        });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [products]);
 
     useEffect(() => {
         const q = query(
@@ -456,15 +488,16 @@ export default function ShopHome() {
                                     : product.price;
 
                                 const hasDiscount = bestPromo && finalPrice < product.price;
+                                const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]);
 
                                 return (
                                     <Link href={`/product/${product.id}`} key={product.id} className="block group">
                                         <div className="bg-white rounded-xl overflow-hidden border border-gray-200 transition-all hover:shadow hover:border-gray-100 relative">
                                             {/* Image */}
                                             <div className="aspect-square bg-white flex items-center justify-center p-4 relative overflow-hidden">
-                                                {product.imageUrl ? (
+                                                {primaryImage ? (
                                                     <img
-                                                        src={product.imageUrl}
+                                                        src={primaryImage}
                                                         alt={product.name}
                                                         className="w-full h-full object-contain transition-transform group-hover:scale-105"
                                                     />

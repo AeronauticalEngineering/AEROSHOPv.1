@@ -15,6 +15,7 @@ export interface ProductVariant {
     stock: number;
     sku?: string;
     image?: string;
+    isDefault?: boolean;
     attributes: Record<string, string>; // { "Color": "Red", "Size": "S" }
 }
 

@@ -84,6 +84,7 @@ export default function CheckoutPaymentPage() {
     const [slipVerifyMessage, setSlipVerifyMessage] = useState("");
     const [slipVerifyStatus, setSlipVerifyStatus] = useState<"idle" | "checking" | "verified" | "failed">("idle");
     const [verifiedSlipId, setVerifiedSlipId] = useState<string | null>(null);
+    const [uploadedSlipId, setUploadedSlipId] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
 
     useEffect(() => {
@@ -345,6 +346,7 @@ export default function CheckoutPaymentPage() {
         if (!file) return;
         setSlipError("");
         setVerifiedSlipId(null);
+        setUploadedSlipId(null);
         const maxBytes = 700 * 1024;
         if (file.size > maxBytes) {
             setSlipFile(null);
@@ -363,18 +365,19 @@ export default function CheckoutPaymentPage() {
 
         try {
             const result = await uploadSelectedSlip(null, file);
+            setUploadedSlipId(result?.slipId || null);
             if (result?.verified) {
                 setVerifiedSlipId(result.slipId);
             } else {
                 setVerifiedSlipId(null);
-                setSlipError(result?.message || "ตรวจสอบสลิปไม่สำเร็จ กรุณาแนบสลิปใหม่");
+                setSlipError("");
             }
         } catch (error) {
             console.error("Slip verify on attach failed:", error);
             setVerifiedSlipId(null);
             setSlipVerifyStatus("failed");
-            setSlipVerifyMessage("ตรวจสอบสลิปไม่สำเร็จ กรุณาแนบสลิปใหม่");
-            setSlipError("ตรวจสอบสลิปไม่สำเร็จ กรุณาแนบสลิปใหม่");
+            setSlipVerifyMessage("ตรวจสอบสลิปไม่สำเร็จ จะสร้างออเดอร์เป็นรอตรวจสอบ");
+            setSlipError("");
         }
     };
     const promptPayQrUrl = getPromptPayQrUrl();
@@ -545,18 +548,9 @@ export default function CheckoutPaymentPage() {
         setIsSubmitting(true);
         try {
             const isSlipPayment = paymentMethod === "promptpay" || paymentMethod === "bank_transfer";
-            const shouldVerifyBeforeSave = Boolean(storeSettings?.enableSlipVerify && isSlipPayment);
             let slipVerifyResult: SlipVerifyResult | null = null;
 
-            if (shouldVerifyBeforeSave) {
-                if (!slipFile || !verifiedSlipId || slipVerifyStatus !== "verified") {
-                    setSlipError("กรุณาแนบสลิปก่อน ระบบต้องตรวจสอบสลิปก่อนบันทึกออเดอร์");
-                    setSlipVerifyStatus("failed");
-                    setSlipVerifyMessage("กรุณาแนบสลิปและรอให้ระบบตรวจสอบผ่านก่อนสร้างออเดอร์");
-                    setIsSubmitting(false);
-                    return;
-                }
-
+            if (isSlipPayment && verifiedSlipId && slipVerifyStatus === "verified") {
                 slipVerifyResult = {
                     verified: true,
                     status: "verified",
@@ -604,7 +598,7 @@ export default function CheckoutPaymentPage() {
                 totalAmount: grandTotal, // Net total
                 status: slipVerifyResult?.verified ? 'paid' : 'pending',
                 paymentMethod: paymentMethod,
-                paymentStatus: slipVerifyResult?.verified ? 'verified' : null,
+                paymentStatus: slipVerifyResult?.verified ? 'verified' : isSlipPayment ? 'pending' : null,
                 paymentVerifiedAt: slipVerifyResult?.verified ? serverTimestamp() : null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
@@ -640,8 +634,9 @@ export default function CheckoutPaymentPage() {
                 }
             }
 
-            if (slipVerifyResult?.slipId) {
-                await updateDoc(doc(db, "payment_slips", slipVerifyResult.slipId), {
+            const existingSlipId = slipVerifyResult?.slipId || uploadedSlipId;
+            if (existingSlipId) {
+                await updateDoc(doc(db, "payment_slips", existingSlipId), {
                     orderId,
                     userId: userProfile?.uid || userProfile?.id || null,
                     updatedAt: serverTimestamp()
@@ -685,8 +680,8 @@ export default function CheckoutPaymentPage() {
 
             if (slipVerifyResult?.verified) {
                 alert("ชำระเงินสำเร็จ ระบบตรวจสอบสลิปผ่านแล้ว");
-            } else if (storeSettings?.enableSlipVerify && slipVerifyResult && !slipVerifyResult.verified) {
-                alert(`ตรวจสอบสลิปไม่ผ่าน: ${slipVerifyResult.message}`);
+            } else if (storeSettings?.enableSlipVerify && isSlipPayment) {
+                alert("สร้างออเดอร์แล้ว สถานะรอตรวจสอบการชำระเงิน");
             }
 
             if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {

@@ -307,7 +307,7 @@ export default function SlipChecksPage() {
                         <td className="px-4 py-3">
                           <div className="text-sm font-medium text-gray-900">{slip.orderId || "-"}</div>
                           {slip.orderId && (
-                            <Link href={`/myorder/${slip.orderId}`} className="text-xs text-blue-600 hover:underline">
+                            <Link href={`/orders/${encodeURIComponent(slip.orderId)}`} className="text-xs text-blue-600 hover:underline">
                               ดูออเดอร์
                             </Link>
                           )}

@@ -18,6 +18,7 @@ type ProductReportRow = {
     key: string;
     productName: string;
     variantInfo: string;
+    addOns: string;
     quantity: number;
     grossSales: number;
     orderCount: number;
@@ -68,6 +69,50 @@ const downloadCsv = (filename: string, rows: Array<Array<unknown>>) => {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+};
+
+type ReportAddOn = {
+    name?: string;
+    value?: string;
+    price?: number;
+};
+
+const formatAddOns = (addOns?: ReportAddOn[]) => {
+    if (!addOns?.length) return "";
+    return addOns
+        .map((addOn) => {
+            const name = addOn.name || "Add-on";
+            const value = addOn.value ? `: ${addOn.value}` : "";
+            const price = Number(addOn.price || 0);
+            const priceText = price > 0 ? ` (+THB ${price.toLocaleString("th-TH")})` : "";
+            return `${name}${value}${priceText}`;
+        })
+        .join(" | ");
+};
+
+const formatItemAddOns = (item: Order["items"][number]) => {
+    const parts: string[] = [];
+    const itemAddOns = formatAddOns(item.addOns);
+    if (itemAddOns) parts.push(itemAddOns);
+
+    (item.bundleItems || []).forEach((bundleItem) => {
+        const bundleAddOns = formatAddOns(bundleItem.selectedAddOns);
+        if (bundleAddOns) {
+            parts.push(`${bundleItem.productName || "Bundle item"}: ${bundleAddOns}`);
+        }
+    });
+
+    return parts.join(" || ");
+};
+
+const formatOrderAddOns = (order: Order) => {
+    return (order.items || [])
+        .map((item) => {
+            const addOns = formatItemAddOns(item);
+            return addOns ? `${item.productName || "Product"} - ${addOns}` : "";
+        })
+        .filter(Boolean)
+        .join(" || ");
 };
 
 export default function AdminReportsPage() {
@@ -135,13 +180,15 @@ export default function AdminReportsPage() {
         filteredOrders.forEach((order) => {
             (order.items || []).forEach((item) => {
                 const variantInfo = typeof item.variantInfo === "string" ? item.variantInfo : "";
-                const key = `${item.productId || item.productName}|${variantInfo}`;
+                const addOns = formatItemAddOns(item);
+                const key = `${item.productId || item.productName}|${variantInfo}|${addOns}`;
                 const quantity = Number(item.quantity || 0);
                 const lineTotal = Number(item.finalPrice ?? item.price ?? 0) * quantity;
                 const current = map.get(key) || {
                     key,
                     productName: item.productName || "สินค้า",
                     variantInfo,
+                    addOns,
                     quantity: 0,
                     grossSales: 0,
                     orderCount: 0
@@ -159,7 +206,7 @@ export default function AdminReportsPage() {
 
     const exportOrdersCsv = () => {
         downloadCsv(`sales-orders-${startDate}-to-${endDate}.csv`, [
-            ["Order ID", "Date", "Customer", "Phone", "Status", "Payment Method", "Items", "Subtotal", "Discount", "Delivery", "Total"],
+            ["Order ID", "Date", "Customer", "Phone", "Status", "Payment Method", "Items", "Add-ons", "Subtotal", "Discount", "Delivery", "Total"],
             ...filteredOrders.map((order) => [
                 formatOrderId(order, 12),
                 toDate(order.createdAt).toLocaleString("th-TH"),
@@ -168,6 +215,7 @@ export default function AdminReportsPage() {
                 order.status,
                 order.paymentMethod || "",
                 (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+                formatOrderAddOns(order),
                 Number(order.subTotal || 0),
                 Number(order.totalDiscount || 0),
                 Number(order.deliveryFee || 0),
@@ -178,10 +226,11 @@ export default function AdminReportsPage() {
 
     const exportProductsCsv = () => {
         downloadCsv(`sales-products-${startDate}-to-${endDate}.csv`, [
-            ["Product", "Variant", "Quantity Sold", "Order Lines", "Sales"],
+            ["Product", "Variant", "Add-ons", "Quantity Sold", "Order Lines", "Sales"],
             ...productRows.map((row) => [
                 row.productName,
                 row.variantInfo,
+                row.addOns,
                 row.quantity,
                 row.orderCount,
                 row.grossSales
