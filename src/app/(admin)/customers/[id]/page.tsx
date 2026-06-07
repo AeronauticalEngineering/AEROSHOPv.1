@@ -487,7 +487,7 @@ export default function CustomerDetailPage() {
                             return (
                                 <div
                                     key={order.id}
-                                    onClick={() => setSelectedOrder(order)}
+                                    onClick={() => router.push(`/orders/${encodeURIComponent(order.id)}`)}
                                     className="block p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                                 >
                                     <div className="flex items-start justify-between gap-4">
