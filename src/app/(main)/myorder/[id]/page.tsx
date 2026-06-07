@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, addDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, addDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useParams } from "next/navigation";
 import { Package, Clock, CheckCircle, Truck, XCircle, MapPin, CreditCard, Copy, Check, Loader2, RotateCcw, CircleAlert, UploadCloud } from "lucide-react";
@@ -154,6 +154,75 @@ export default function OrderDetailPage() {
             fetchOrder();
         }
     }, [orderId]);
+
+    useEffect(() => {
+        if (!orderId) return;
+
+        const unsubscribe = onSnapshot(
+            doc(db, "orders", orderId),
+            (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setOrder({
+                        id: docSnap.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate() || new Date()
+                    } as Order);
+                } else {
+                    setOrder(null);
+                }
+                setLoading(false);
+            },
+            (error) => {
+                console.error("Error listening to order:", error);
+                setLoading(false);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [orderId]);
+
+    useEffect(() => {
+        if (!orderId) return;
+
+        const slipQuery = query(
+            collection(db, "payment_slips"),
+            where("orderId", "==", orderId)
+        );
+
+        const unsubscribe = onSnapshot(
+            slipQuery,
+            (slipSnap) => {
+                if (slipSnap.empty) {
+                    setSlipDocId(null);
+                    setSlipStatus({ status: '', message: '' });
+                    return;
+                }
+
+                const slipDoc = slipSnap.docs[0];
+                const slipData = slipDoc.data();
+                setSlipDocId(slipDoc.id);
+                if (slipData.base64) {
+                    setSlipPreview(slipData.base64);
+                }
+
+                const enableVerify = storeSettings?.enableSlipVerify === true;
+                setSlipStatus({
+                    status: slipData.verifyStatus || 'pending',
+                    message: enableVerify
+                        ? (slipData.verifyMessage || 'รอตรวจสอบ')
+                        : (slipData.verifyStatus === 'verified' || slipData.verifyStatus === 'rejected'
+                            ? (slipData.verifyMessage || 'รอตรวจสอบ')
+                            : 'รอการตรวจสอบโดยเจ้าหน้าที่')
+                });
+            },
+            (error) => {
+                console.error("Error listening to payment slip:", error);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [orderId, storeSettings?.enableSlipVerify]);
 
     const getStatusInfo = (status: Order['status']) => {
         const styles = {
@@ -329,6 +398,8 @@ export default function OrderDetailPage() {
 
     const requestSlipVerify = async (id: string) => {
         try {
+            setSlipStatus({ status: 'checking', message: 'กำลังตรวจสอบสลิปอัตโนมัติ...' });
+            setSlipError("");
             const res = await fetch("/api/slipok/verify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -407,7 +478,7 @@ export default function OrderDetailPage() {
         }
     };
 
-    const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleSlipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!order || ["cancelled", "completed", "returned"].includes(order.status)) return;
         const file = e.target.files?.[0];
         if (!file) return;
@@ -421,21 +492,26 @@ export default function OrderDetailPage() {
 
         setSlipFile(file);
         setSlipPreview(URL.createObjectURL(file));
+
+        if (storeSettings?.enableSlipVerify) {
+            await handleSlipUpload(file);
+        }
     };
 
-    const handleSlipUpload = async () => {
-        if (!orderId || !order || !slipFile || slipUploading) return;
+    const handleSlipUpload = async (fileOverride?: File) => {
+        const fileToUpload = fileOverride || slipFile;
+        if (!orderId || !order || !fileToUpload || slipUploading) return;
         if (["cancelled", "completed", "returned"].includes(order.status)) return;
         setSlipUploading(true);
         setSlipError("");
         try {
-            const base64 = await fileToBase64(slipFile);
+            const base64 = await fileToBase64(fileToUpload);
             setSlipPreview(base64); // Update preview immediately
 
             const slipData = {
                 base64,
-                mimeType: slipFile.type,
-                size: slipFile.size,
+                mimeType: fileToUpload.type,
+                size: fileToUpload.size,
                 paymentMethod: order.paymentMethod || null,
                 amount: order.totalAmount || 0,
                 needsVerify: false,
@@ -445,6 +521,11 @@ export default function OrderDetailPage() {
             };
 
             setSlipStatus({ status: 'pending', message: 'กำลังตรวจสอบ...' });
+
+            setSlipStatus({
+                status: storeSettings?.enableSlipVerify ? 'checking' : 'pending',
+                message: storeSettings?.enableSlipVerify ? 'กำลังตรวจสอบสลิปอัตโนมัติ...' : 'รอการตรวจสอบโดยเจ้าหน้าที่'
+            });
 
             if (slipDocId) {
                 await updateDoc(doc(db, "payment_slips", slipDocId), slipData);
@@ -530,8 +611,15 @@ export default function OrderDetailPage() {
     const isCancelledOrder = order?.status === 'cancelled';
     const canUsePayment = order ? !["cancelled", "completed", "returned"].includes(order.status) : false;
     const canChangePayment = order?.status === 'pending' && canUsePayment;
-    const isSlipPayment = order?.paymentMethod === 'bank_transfer' || order?.paymentMethod === 'promptpay';
+    const selectedPaymentMethod = order?.paymentMethod === 'pay_later' ? "" : (order?.paymentMethod || "");
+    const isSlipPayment = selectedPaymentMethod === 'bank_transfer' || selectedPaymentMethod === 'promptpay';
     const canManageSlipPayment = isSlipPayment && canUsePayment;
+    const paymentMethodLabel =
+        selectedPaymentMethod === 'bank_transfer' ? 'โอนเงินเข้าบัญชี' :
+            selectedPaymentMethod === 'promptpay' ? 'พร้อมเพย์ QR' :
+                selectedPaymentMethod === 'cod' ? 'เก็บเงินปลายทาง' :
+                    ['stripe', 'omise'].includes(selectedPaymentMethod) ? 'บัตรเครดิต/เดบิต' :
+                        'ยังไม่ได้เลือก';
     const statusInfo = order ? getStatusInfo(order.status) : null;
     const canCancelOrder = order ? !["cancelled", "completed", "shipped", "returned"].includes(order.status) : false;
     const needsRefundChannel = order?.status === "paid" || order?.paymentStatus === "paid" || order?.paymentStatus === "verified";
@@ -785,12 +873,15 @@ export default function OrderDetailPage() {
                             <div className="relative">
                                 <select
                                     className="appearance-none bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer text-right"
-                                    value={order.paymentMethod || ""}
+                                    value={selectedPaymentMethod}
                                     onChange={(e) => {
-                                        handlePaymentChange(e.target.value);
+                                        if (e.target.value) {
+                                            handlePaymentChange(e.target.value);
+                                        }
                                     }}
                                     disabled={isUpdatingPayment}
                                 >
+                                    <option value="">เลือกวิธีชำระเงิน</option>
                                     {storeSettings.enablePromptPay && <option value="promptpay">เปลี่ยนเป็น PromptPay</option>}
                                     {storeSettings.enableBankTransfer && <option value="bank_transfer">เปลี่ยนเป็น โอนเงิน</option>}
                                     {storeSettings.enableCOD && <option value="cod">เปลี่ยนเป็น เก็บเงินปลายทาง</option>}
@@ -799,10 +890,11 @@ export default function OrderDetailPage() {
                         )}
                     </div>
 
-                    <div className="p-5">
+                    <div className={selectedPaymentMethod ? "p-5" : "hidden"}>
                         <div className="flex items-center justify-between mb-4">
                             <span className="text-sm text-slate-600">วิธีชำระเงิน</span>
                             <span className="text-sm font-medium text-slate-900 bg-slate-100 px-2 py-1 rounded">
+                                {!selectedPaymentMethod && paymentMethodLabel}
                                 {order.paymentMethod === 'bank_transfer' && 'โอนเงินเข้าบัญชี'}
                                 {order.paymentMethod === 'promptpay' && 'พร้อมเพย์ QR'}
                                 {order.paymentMethod === 'cod' && 'เก็บเงินปลายทาง'}
@@ -866,13 +958,13 @@ export default function OrderDetailPage() {
                             </button>
                         </div>
 
-                        <div className="max-h-[78vh] overflow-y-auto bg-slate-100 p-4">
+                        <div className="max-h-[78vh] overflow-y-auto bg-slate-100 p-3">
                             {storeSettings && (
-                                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
                                         <div>
-                                            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">ยอดชำระ</p>
-                                            <p className="mt-0.5 text-2xl font-bold text-slate-900">฿{order.totalAmount.toLocaleString()}</p>
+                                            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">ยอดชำระ</p>
+                                            <p className="text-xl font-bold text-slate-900">฿{order.totalAmount.toLocaleString()}</p>
                                         </div>
                                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
                                             {formatOrderId(order, 8)}
@@ -880,8 +972,8 @@ export default function OrderDetailPage() {
                                     </div>
 
                                     {order.paymentMethod === 'promptpay' && storeSettings.enablePromptPay && (
-                                        <div className="mt-3 grid gap-3">
-                                            <div className="mx-auto h-40 w-40 shrink-0 overflow-hidden rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+                                        <div className="mt-3 grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3 max-[360px]:grid-cols-1">
+                                            <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-blue-100 bg-white p-2 shadow-sm max-[360px]:mx-auto">
                                                 {storeSettings.promptPayQrUrl ? (
                                                     <button
                                                         type="button"
@@ -914,14 +1006,14 @@ export default function OrderDetailPage() {
                                                     <div className="flex h-full items-center justify-center px-3 text-center text-[10px] text-slate-400">ไม่พบ QR</div>
                                                 )}
                                             </div>
-                                            <div className="min-w-0 rounded-xl bg-blue-50/70 p-3">
+                                            <div className="min-w-0 rounded-xl bg-blue-50/70 p-2.5">
                                                 <p className="text-sm font-extrabold text-blue-950">PromptPay QR</p>
                                                 {storeSettings.promptPayAccountName && (
                                                     <p className="mt-1 text-[11px] font-semibold text-slate-700">
                                                         ผู้รับโอน: {storeSettings.promptPayAccountName}
                                                     </p>
                                                 )}
-                                                <p className="mt-1 text-[11px] text-slate-500">สแกนจ่ายแล้วแนบสลิปด้านล่าง</p>
+                                                <p className="mt-0.5 text-[10px] text-slate-500">สแกนจ่ายแล้วแนบสลิปด้านล่าง</p>
                                                 {storeSettings.promptPayId && (
                                                     <button
                                                         type="button"
@@ -960,7 +1052,7 @@ export default function OrderDetailPage() {
                                 </div>
                             )}
 
-                            <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
                                 {/* Always render hidden input */}
                                 <input
                                     type="file"
@@ -999,17 +1091,21 @@ export default function OrderDetailPage() {
                                         )}
                                     </div>
                                 ) : (
-                                    <label htmlFor="slip-upload-input" className="flex w-full cursor-pointer flex-col items-center justify-center rounded-xl bg-orange-500 px-4 py-3 text-center text-sm font-extrabold text-white shadow-lg shadow-orange-500/25 transition hover:bg-orange-600 active:scale-[0.99]">
+                                    <label htmlFor="slip-upload-input" className="flex w-full cursor-pointer flex-col items-center justify-center rounded-xl bg-orange-500 px-4 py-2.5 text-center text-sm font-extrabold text-white shadow-lg shadow-orange-500/25 transition hover:bg-orange-600 active:scale-[0.99]">
                                         <span className="inline-flex items-center gap-2">
                                             <UploadCloud size={18} />
                                             แนบสลิป
                                         </span>
                                         <span className="mt-1 block text-[10px] font-medium text-orange-50">รูปภาพไม่เกิน 700KB</span>
+                                        <span className="mt-0.5 block text-[10px] font-medium text-orange-50">
+                                            {storeSettings?.enableSlipVerify ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์" : "รูปภาพไม่เกิน 700KB"}
+                                        </span>
                                     </label>
                                 )}
 
-                                <div className={`mt-2 rounded-xl border px-3 py-2 text-xs font-medium ${slipStatus.status === 'verified' ? 'border-green-200 bg-green-50 text-green-700' :
-                                    slipStatus.status === 'rejected' ? 'border-red-200 bg-red-50 text-red-700' :
+                                <div className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${slipStatus.status === 'verified' ? 'border-green-200 bg-green-50 text-green-700' :
+                                    slipStatus.status === 'checking' ? 'border-blue-200 bg-blue-50 text-blue-700' :
+                                    (slipStatus.status === 'rejected' || slipStatus.status === 'failed' || slipStatus.status === 'error') ? 'border-red-200 bg-red-50 text-red-700' :
                                         slipPreview || slipDocId ? 'border-amber-200 bg-amber-50 text-amber-700' :
                                             'border-slate-200 bg-slate-50 text-slate-500'
                                     }`}>
@@ -1020,10 +1116,10 @@ export default function OrderDetailPage() {
                                 </div>}
                             </div>
                         </div>
-                        <div className="border-t border-slate-200 bg-white p-4 flex gap-3 pb-safe">
+                        <div className="border-t border-slate-200 bg-white p-3 flex gap-2 pb-safe">
                             <button
                                 onClick={() => setIsSlipModalOpen(false)}
-                                className="flex-1 px-4 py-3 bg-white text-slate-700 text-sm font-medium border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                                className="flex-1 px-4 py-2.5 bg-white text-slate-700 text-sm font-medium border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
                             >
                                 ปิด
                             </button>
@@ -1036,8 +1132,8 @@ export default function OrderDetailPage() {
                                             handleSlipUpload();
                                         }
                                     }}
-                                    disabled={(!slipFile && !slipDocId) || slipUploading}
-                                    className={`flex-[2] px-4 py-3 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all ${(slipDocId && !slipFile)
+                                    disabled={(!slipFile && !slipDocId) || slipUploading || slipStatus.status === 'checking'}
+                                    className={`flex-[2] px-4 py-2.5 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all ${(slipDocId && !slipFile)
                                         ? 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-50'
                                         : 'bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50'
                                         }`}

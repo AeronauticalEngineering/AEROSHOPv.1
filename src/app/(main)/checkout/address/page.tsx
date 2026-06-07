@@ -379,7 +379,6 @@ export default function CheckoutAddressPage() {
                         </div>
 
                         {/* Save to Book Checkbox */}
-                        {!selectedLocation && (
                         <div className="flex items-center gap-2 pt-2 border-t border-gray-50 mt-2">
                             <input
                                 type="checkbox"
@@ -392,7 +391,6 @@ export default function CheckoutAddressPage() {
                                 บันทึกที่อยู่นี้ลงสมุดที่อยู่
                             </label>
                         </div>
-                        )}
                     </div>
                 </form>
             </main>

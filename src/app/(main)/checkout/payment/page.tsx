@@ -51,6 +51,8 @@ type SlipVerifyResult = {
     slipId: string;
 };
 
+type PaymentMethod = "promptpay" | "bank_transfer" | "cod" | "stripe" | "omise";
+
 const toDate = (value: DateLike) => {
     if (value instanceof Date) return value;
     if (typeof value === "object" && "toDate" in value) return value.toDate();
@@ -67,7 +69,7 @@ export default function CheckoutPaymentPage() {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     const { liff } = useLiff(liffId);
     const [addressData, setAddressData] = useState<CheckoutAddress | null>(null);
-    const [paymentMethod, setPaymentMethod] = useState<string>("");
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [promotions, setPromotions] = useState<Promotion[]>([]);
     const [promotionSettings, setPromotionSettings] = useState<PromotionSettings>({
@@ -322,6 +324,29 @@ export default function CheckoutPaymentPage() {
         ? 0
         : selectedShippingOption?.fee ?? 0;
     const grandTotal = netTotal + deliveryFee;
+    const availablePaymentMethods = useMemo<PaymentMethod[]>(() => {
+        if (!storeSettings) return [];
+        return [
+            storeSettings.enablePromptPay ? "promptpay" : null,
+            storeSettings.enableBankTransfer ? "bank_transfer" : null,
+            storeSettings.enableCOD ? "cod" : null,
+            storeSettings.enableStripe ? "stripe" : null,
+            storeSettings.enableOmise ? "omise" : null,
+        ].filter(Boolean) as PaymentMethod[];
+    }, [storeSettings]);
+    const selectedPaymentMethod = availablePaymentMethods.includes(paymentMethod as PaymentMethod)
+        ? (paymentMethod as PaymentMethod)
+        : "";
+    const canSubmitOrder = !isSubmitting && slipVerifyStatus !== "checking";
+
+    useEffect(() => {
+        if (paymentMethod && !availablePaymentMethods.includes(paymentMethod)) {
+            setPaymentMethod("");
+            return;
+        }
+
+    }, [availablePaymentMethods, paymentMethod]);
+
     const getPromptPayQrUrl = () => {
         if (!storeSettings) return null;
         if (storeSettings.promptPayQrUrl) return storeSettings.promptPayQrUrl;
@@ -388,7 +413,7 @@ export default function CheckoutPaymentPage() {
         const slipDoc = await addDoc(collection(db, "payment_slips"), {
             orderId,
             userId: userProfile?.uid || userProfile?.id || null,
-            paymentMethod,
+            paymentMethod: selectedPaymentMethod || null,
             amount: grandTotal,
             base64,
             mimeType: file.type,
@@ -540,14 +565,10 @@ export default function CheckoutPaymentPage() {
 
     const handleOrderSubmit = async () => {
         if (!addressData) return;
-        if (!paymentMethod) {
-            alert("กรุณาเลือกวิธีการชำระเงิน");
-            return;
-        }
 
         setIsSubmitting(true);
         try {
-            const isSlipPayment = paymentMethod === "promptpay" || paymentMethod === "bank_transfer";
+            const isSlipPayment = selectedPaymentMethod === "promptpay" || selectedPaymentMethod === "bank_transfer";
             let slipVerifyResult: SlipVerifyResult | null = null;
 
             if (isSlipPayment && verifiedSlipId && slipVerifyStatus === "verified") {
@@ -597,7 +618,7 @@ export default function CheckoutPaymentPage() {
                 shippingOptionName: selectedShippingOption?.name || null,
                 totalAmount: grandTotal, // Net total
                 status: slipVerifyResult?.verified ? 'paid' : 'pending',
-                paymentMethod: paymentMethod,
+                paymentMethod: selectedPaymentMethod || 'pay_later',
                 paymentStatus: slipVerifyResult?.verified ? 'verified' : isSlipPayment ? 'pending' : null,
                 paymentVerifiedAt: slipVerifyResult?.verified ? serverTimestamp() : null,
                 createdAt: serverTimestamp(),
@@ -645,7 +666,7 @@ export default function CheckoutPaymentPage() {
                 slipVerifyResult = await uploadSelectedSlip(orderId);
             }
 
-            if (paymentMethod === 'stripe') {
+            if (selectedPaymentMethod === 'stripe') {
                 const stripeRes = await fetch('/api/stripe/create-checkout-session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -752,6 +773,7 @@ export default function CheckoutPaymentPage() {
                     {storeSettings.enablePromptPay && (
                         <div className="space-y-2">
                             <button
+                                type="button"
                                 onClick={() => setPaymentMethod('promptpay')}
                                 className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'promptpay'
                                     ? 'border-gray-900 bg-white'
@@ -880,6 +902,7 @@ export default function CheckoutPaymentPage() {
 
                     {storeSettings.enableBankTransfer && (
                         <button
+                            type="button"
                             onClick={() => setPaymentMethod('bank_transfer')}
                             className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'bank_transfer'
                                 ? 'border-gray-900 bg-white'
@@ -908,6 +931,7 @@ export default function CheckoutPaymentPage() {
 
                     {storeSettings.enableCOD && (
                         <button
+                            type="button"
                             onClick={() => setPaymentMethod('cod')}
                             className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'cod'
                                 ? 'border-gray-900 bg-white'
@@ -932,6 +956,7 @@ export default function CheckoutPaymentPage() {
 
                     {storeSettings.enableStripe && (
                         <button
+                            type="button"
                             onClick={() => setPaymentMethod('stripe')}
                             className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'stripe'
                                 ? 'border-gray-900 bg-white'
@@ -956,6 +981,7 @@ export default function CheckoutPaymentPage() {
 
                     {storeSettings.enableOmise && (
                         <button
+                            type="button"
                             onClick={() => setPaymentMethod('omise')}
                             className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'omise'
                                 ? 'border-gray-900 bg-white'
@@ -1007,8 +1033,9 @@ export default function CheckoutPaymentPage() {
             {/* Bottom Button */}
             <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-100 px-4 py-3 pb-6 z-30">
                 <button
+                    type="button"
                     onClick={handleOrderSubmit}
-                    disabled={isSubmitting || !paymentMethod || slipVerifyStatus === "checking"}
+                    disabled={!canSubmitOrder}
                     className="w-full bg-gray-900 text-white py-3.5 rounded-full font-bold text-base hover:bg-gray-800 transition-all disabled:opacity-50 flex justify-center items-center"
                 >
                     {isSubmitting ? (
