@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { LineAdminUser, PickupOption, ShippingConditionType, ShippingOption, StoreSettings } from "@/types/store";
 import {
@@ -50,6 +50,31 @@ type FirestoreUsage = {
     permissionLimited?: boolean;
     hint?: string;
     updatedAt?: string;
+};
+
+type StorageUsage = {
+    projectId: string;
+    bucketName: string;
+    plan: "spark" | "blaze";
+    metrics: {
+        storageBytes: number | null;
+        objectCount: number | null;
+    };
+    limits: {
+        storageBytes: number | null;
+    };
+    percent: {
+        storage: number | null;
+    };
+    permissionLimited?: boolean;
+    hint?: string;
+    updatedAt?: string;
+};
+
+type StorageRuleCheck = {
+    status: "idle" | "checking" | "ok" | "failed";
+    message: string;
+    checkedAt?: string;
 };
 
 function formatBytes(bytes?: number | null) {
@@ -137,6 +162,8 @@ export default function AdminSettingsPage() {
         storeAddress: "",
         storeLogoUrl: "",
         storeMapUrl: "",
+        useStorageForProductImages: false,
+        useStorageForPaymentSlips: false,
         bankName: "",
         bankAccountName: "",
         bankAccountNumber: "",
@@ -184,6 +211,13 @@ export default function AdminSettingsPage() {
     const [firestoreUsage, setFirestoreUsage] = useState<FirestoreUsage | null>(null);
     const [firestoreUsageLoading, setFirestoreUsageLoading] = useState(false);
     const [firestoreUsageError, setFirestoreUsageError] = useState("");
+    const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+    const [storageUsageLoading, setStorageUsageLoading] = useState(false);
+    const [storageUsageError, setStorageUsageError] = useState("");
+    const [storageRuleCheck, setStorageRuleCheck] = useState<StorageRuleCheck>({
+        status: "idle",
+        message: "ยังไม่ได้ตรวจสอบ"
+    });
     const [slipCleanupLoadingMonth, setSlipCleanupLoadingMonth] = useState<number | null>(null);
     const [slipCleanupMessage, setSlipCleanupMessage] = useState("");
 
@@ -206,6 +240,8 @@ export default function AdminSettingsPage() {
                         enableSlipVerify: data.enableSlipVerify ?? prev.enableSlipVerify,
                         storeLogoUrl: data.storeLogoUrl ?? prev.storeLogoUrl,
                         storeMapUrl: data.storeMapUrl ?? prev.storeMapUrl,
+                        useStorageForProductImages: data.useStorageForProductImages ?? prev.useStorageForProductImages,
+                        useStorageForPaymentSlips: data.useStorageForPaymentSlips ?? prev.useStorageForPaymentSlips,
                         promptPayId: data.promptPayId ?? prev.promptPayId,
                         promptPayAccountName: data.promptPayAccountName ?? prev.promptPayAccountName,
                         promptPayQrUrl: data.promptPayQrUrl ?? prev.promptPayQrUrl,
@@ -390,6 +426,66 @@ export default function AdminSettingsPage() {
         }
     };
 
+    const fetchStorageUsage = async () => {
+        setStorageUsageLoading(true);
+        setStorageUsageError("");
+        try {
+            const res = await fetch("/api/admin/storage/usage");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data?.error || "โหลดข้อมูล Storage ไม่สำเร็จ");
+            }
+            setStorageUsage({
+                projectId: String(data?.projectId || ""),
+                bucketName: String(data?.bucketName || ""),
+                plan: data?.plan === "blaze" ? "blaze" : "spark",
+                metrics: {
+                    storageBytes: typeof data?.metrics?.storageBytes === "number" ? data.metrics.storageBytes : null,
+                    objectCount: typeof data?.metrics?.objectCount === "number" ? data.metrics.objectCount : null
+                },
+                limits: {
+                    storageBytes: typeof data?.limits?.storageBytes === "number" ? data.limits.storageBytes : null
+                },
+                percent: {
+                    storage: typeof data?.percent?.storage === "number" ? data.percent.storage : null
+                },
+                permissionLimited: Boolean(data?.permissionLimited),
+                hint: typeof data?.hint === "string" ? data.hint : undefined,
+                updatedAt: typeof data?.updatedAt === "string" ? data.updatedAt : undefined
+            });
+        } catch (error) {
+            setStorageUsageError((error as Error).message);
+            setStorageUsage(null);
+        } finally {
+            setStorageUsageLoading(false);
+        }
+    };
+
+    const checkStorageRules = async () => {
+        setStorageRuleCheck({ status: "checking", message: "กำลังตรวจสอบ..." });
+        try {
+            const testPath = `diagnostics/storage-rule-check-${Date.now()}.txt`;
+            const testRef = ref(storage, testPath);
+            await uploadBytes(testRef, new Blob(["ok"], { type: "text/plain" }), {
+                contentType: "text/plain"
+            });
+            await deleteObject(testRef);
+            setStorageRuleCheck({
+                status: "ok",
+                message: "เชื่อมต่อและ Rules อนุญาต upload/delete",
+                checkedAt: new Date().toISOString()
+            });
+            await fetchStorageUsage();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "ตรวจสอบ Storage ไม่สำเร็จ";
+            setStorageRuleCheck({
+                status: "failed",
+                message,
+                checkedAt: new Date().toISOString()
+            });
+        }
+    };
+
     const handleCleanupSlips = async (months: 1 | 3 | 6) => {
         const confirmed = window.confirm(`ยืนยันลบสลิปที่เก่ากว่า ${months} เดือน?`);
         if (!confirmed) return;
@@ -408,8 +504,18 @@ export default function AdminSettingsPage() {
             }
 
             const deletedCount = Number(data?.deletedCount || 0);
-            setSlipCleanupMessage(`ลบสลิปสำเร็จ ${deletedCount.toLocaleString()} รายการ`);
+            const deletedStorageCount = Number(data?.deletedStorageCount || 0);
+            const failedStorageDeleteCount = Number(data?.failedStorageDeleteCount || 0);
+            const storageNote = data?.storageDeleteSkipped
+                ? " ไม่ได้ลบไฟล์ Storage เพราะยังไม่ได้ตั้งค่า bucket"
+                : failedStorageDeleteCount > 0
+                    ? ` ลบไฟล์ Storage ไม่สำเร็จ ${failedStorageDeleteCount.toLocaleString()} ไฟล์`
+                    : "";
+            setSlipCleanupMessage(
+                `ลบสลิปสำเร็จ ${deletedCount.toLocaleString()} รายการ, ลบไฟล์ Storage ${deletedStorageCount.toLocaleString()} ไฟล์${storageNote}`
+            );
             await fetchFirestoreUsage();
+            await fetchStorageUsage();
         } catch (error) {
             setSlipCleanupMessage((error as Error).message);
         } finally {
@@ -425,6 +531,7 @@ export default function AdminSettingsPage() {
     useEffect(() => {
         if (activeTab !== "firestore") return;
         fetchFirestoreUsage();
+        fetchStorageUsage();
     }, [activeTab]);
 
     const handleSave = async (e: React.FormEvent) => {
@@ -974,16 +1081,119 @@ export default function AdminSettingsPage() {
                         </div>
                         <button
                             type="button"
-                            onClick={fetchFirestoreUsage}
-                            disabled={firestoreUsageLoading}
+                            onClick={() => {
+                                fetchFirestoreUsage();
+                                fetchStorageUsage();
+                            }}
+                            disabled={firestoreUsageLoading || storageUsageLoading}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-60"
                         >
-                            <RefreshCw size={12} className={firestoreUsageLoading ? "animate-spin" : ""} />
+                            <RefreshCw size={12} className={firestoreUsageLoading || storageUsageLoading ? "animate-spin" : ""} />
                             รีเฟรช
                         </button>
                     </div>
 
                     <div className="p-4 space-y-4">
+                        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-blue-900">Firebase Storage: รูปสินค้า</p>
+                                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
+                                            <p className="text-blue-500">สถานะ</p>
+                                            <p className="font-bold text-blue-950">{settings.useStorageForProductImages ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
+                                            <p className="text-blue-500">Bucket</p>
+                                            <p className="truncate font-bold text-blue-950">{storageUsage?.bucketName || "-"}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
+                                            <p className="text-blue-500">Usage</p>
+                                            <p className="font-bold text-blue-950">
+                                                {formatBytes(storageUsage?.metrics.storageBytes)} / {storageUsage?.limits.storageBytes != null ? formatBytes(storageUsage.limits.storageBytes) : "ไม่จำกัด"}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
+                                            <p className="text-blue-500">Objects</p>
+                                            <p className="font-bold text-blue-950">{storageUsage?.metrics.objectCount != null ? storageUsage.metrics.objectCount.toLocaleString() : "-"}</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
+                                        <div
+                                            className="h-full bg-blue-600 transition-all"
+                                            style={{ width: `${Math.min(100, Math.max(0, storageUsage?.percent.storage || 0))}%` }}
+                                        />
+                                    </div>
+                                </div>
+                                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-blue-900 shadow-sm ring-1 ring-blue-100">
+                                    <input
+                                        type="checkbox"
+                                        name="useStorageForProductImages"
+                                        checked={Boolean(settings.useStorageForProductImages)}
+                                        onChange={handleChange}
+                                        className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    {settings.useStorageForProductImages ? "เปิดอยู่" : "ปิดอยู่"}
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-amber-900">Firebase Storage: รูปสลิป</p>
+                                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
+                                            <p className="text-amber-600">สถานะ</p>
+                                            <p className="font-bold text-amber-950">{settings.useStorageForPaymentSlips ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
+                                            <p className="text-amber-600">Connection</p>
+                                            <p className={`font-bold ${storageRuleCheck.status === "ok" ? "text-green-700" : storageRuleCheck.status === "failed" ? "text-red-700" : "text-amber-950"}`}>
+                                                {storageRuleCheck.status === "ok" ? "ถูกต้อง" : storageRuleCheck.status === "failed" ? "ผิดพลาด" : storageRuleCheck.status === "checking" ? "กำลังตรวจ" : "ยังไม่ตรวจ"}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
+                                            <p className="text-amber-600">Rules</p>
+                                            <p className={`font-bold ${storageRuleCheck.status === "ok" ? "text-green-700" : storageRuleCheck.status === "failed" ? "text-red-700" : "text-amber-950"}`}>
+                                                {storageRuleCheck.status === "ok" ? "ทำงาน" : storageRuleCheck.status === "failed" ? "ไม่ผ่าน" : "-"}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
+                                            <p className="text-amber-600">Plan</p>
+                                            <p className="font-bold uppercase text-amber-950">{storageUsage?.plan || "-"}</p>
+                                        </div>
+                                    </div>
+                                    <p className="mt-2 truncate text-[11px] text-amber-700">{storageRuleCheck.message}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={checkStorageRules}
+                                        disabled={storageRuleCheck.status === "checking"}
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm ring-1 ring-amber-100 hover:bg-amber-50 disabled:opacity-60"
+                                    >
+                                        <RefreshCw size={12} className={storageRuleCheck.status === "checking" ? "animate-spin" : ""} />
+                                        ตรวจ Rules
+                                    </button>
+                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm ring-1 ring-amber-100">
+                                        <input
+                                            type="checkbox"
+                                            name="useStorageForPaymentSlips"
+                                            checked={Boolean(settings.useStorageForPaymentSlips)}
+                                            onChange={handleChange}
+                                            className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                                        />
+                                        {settings.useStorageForPaymentSlips ? "เปิดอยู่" : "ปิดอยู่"}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {storageUsageError && (
+                            <div className="text-sm text-red-600">{storageUsageError}</div>
+                        )}
+
                         {firestoreUsageError && (
                             <div className="text-sm text-red-600">{firestoreUsageError}</div>
                         )}
@@ -1058,7 +1268,7 @@ export default function AdminSettingsPage() {
                                 <Trash2 size={16} />
                                 ล้างสลิปเก่า
                             </div>
-                            <p className="text-xs text-red-600">ลบข้อมูลในคอลเลกชัน `payment_slips` ที่เก่ากว่าระยะเวลาที่เลือก</p>
+                            <p className="text-xs text-red-600">ลบข้อมูลในคอลเลกชัน `payment_slips` และไฟล์ Firebase Storage ที่ผูกไว้ ที่เก่ากว่าระยะเวลาที่เลือก</p>
                             <div className="flex flex-wrap gap-2">
                                 {[1, 3, 6].map((months) => (
                                     <button

@@ -14,6 +14,8 @@ type SlipCheck = {
   amount?: number;
   paymentMethod?: string;
   base64?: string;
+  imageUrl?: string;
+  storagePath?: string;
   verifyStatus?: string;
   verifyMessage?: string;
   verifiedAmount?: number | null;
@@ -360,7 +362,7 @@ export default function SlipChecksPage() {
                             {isSlipVerifyEnabled && (
                               <button
                                 onClick={() => requestVerify(slip)}
-                                disabled={!slip.base64 || verifyingId === slip.id}
+                                disabled={(!slip.base64 && !slip.imageUrl) || verifyingId === slip.id}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                                 title="ให้ระบบช่วยตรวจสอบ"
                               >
@@ -537,9 +539,9 @@ export default function SlipChecksPage() {
             </div>
             <div className="bg-[#F8F9FA] p-4">
               <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-gray-200 bg-white p-3">
-                {imagePreviewTarget.base64 ? (
+                {imagePreviewTarget.base64 || imagePreviewTarget.imageUrl ? (
                   <img
-                    src={imagePreviewTarget.base64}
+                    src={imagePreviewTarget.base64 || imagePreviewTarget.imageUrl}
                     alt={`สลิป ${imagePreviewTarget.orderId || ""}`}
                     className="max-h-[72vh] max-w-full object-contain"
                   />

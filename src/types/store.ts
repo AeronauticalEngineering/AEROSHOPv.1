@@ -41,6 +41,8 @@ export interface StoreSettings {
     storeAddress: string;
     storeLogoUrl?: string;
     storeMapUrl?: string;
+    useStorageForProductImages?: boolean;
+    useStorageForPaymentSlips?: boolean;
 
     // Payment info
     bankName: string;

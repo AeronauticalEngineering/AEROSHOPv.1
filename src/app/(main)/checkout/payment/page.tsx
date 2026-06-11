@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
@@ -9,7 +9,8 @@ import useLiff from "@/hooks/useLiff";
 
 import { CreditCard, Check, Copy, QrCode, Smartphone, Truck, Globe, XCircle, UploadCloud } from "lucide-react";
 import { addDoc, collection, serverTimestamp, doc, setDoc, getDoc, updateDoc, arrayUnion, increment, query, where, orderBy, getDocs, runTransaction } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
 import { ShippingOption, StoreSettings } from "@/types/store";
 
@@ -88,6 +89,7 @@ export default function CheckoutPaymentPage() {
     const [verifiedSlipId, setVerifiedSlipId] = useState<string | null>(null);
     const [uploadedSlipId, setUploadedSlipId] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+    const orderCreatedRef = useRef(false);
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -366,17 +368,26 @@ export default function CheckoutPaymentPage() {
             reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
             reader.readAsDataURL(file);
         });
+    const uploadSlipToStorage = async (file: File, slipId: string) => {
+        const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const storagePath = `payment_slips/${slipId}-${Date.now()}.${extension}`;
+        const storageRef = ref(storage, storagePath);
+        await uploadBytes(storageRef, file, { contentType: file.type || "image/jpeg" });
+        const imageUrl = await getDownloadURL(storageRef);
+        return { imageUrl, storagePath };
+    };
     const handleSlipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setSlipError("");
         setVerifiedSlipId(null);
         setUploadedSlipId(null);
-        const maxBytes = 700 * 1024;
+        const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
+        const maxBytes = useStorageForSlips ? 5 * 1024 * 1024 : 700 * 1024;
         if (file.size > maxBytes) {
             setSlipFile(null);
             setSlipPreview(null);
-            setSlipError("ไฟล์ใหญ่เกินไป (จำกัด 700KB) โปรดบีบอัดรูป");
+            setSlipError(`ไฟล์ใหญ่เกินไป (จำกัด ${useStorageForSlips ? "5MB" : "700KB"}) โปรดบีบอัดรูป`);
             setSlipVerifyStatus("failed");
             setSlipVerifyMessage("ไฟล์ใหญ่เกินไป กรุณาแนบสลิปใหม่");
             return;
@@ -409,20 +420,37 @@ export default function CheckoutPaymentPage() {
     const uploadSelectedSlip = async (orderId: string | null, fileOverride?: File): Promise<SlipVerifyResult | null> => {
         const file = fileOverride || slipFile;
         if (!file || !addressData) return null;
-        const base64 = await fileToBase64(file);
-        const slipDoc = await addDoc(collection(db, "payment_slips"), {
+        const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
+        const baseSlipData = {
             orderId,
             userId: userProfile?.uid || userProfile?.id || null,
             paymentMethod: selectedPaymentMethod || null,
             amount: grandTotal,
-            base64,
             mimeType: file.type,
             size: file.size,
             needsVerify: false,
             verifyStatus: "pending",
             verifyMessage: "รอตรวจสอบ",
             createdAt: serverTimestamp()
-        });
+        };
+        const slipDoc = await addDoc(collection(db, "payment_slips"), baseSlipData);
+
+        if (useStorageForSlips) {
+            const { imageUrl, storagePath } = await uploadSlipToStorage(file, slipDoc.id);
+            await updateDoc(doc(db, "payment_slips", slipDoc.id), {
+                imageUrl,
+                storagePath,
+                storageProvider: "firebase_storage",
+                updatedAt: serverTimestamp()
+            });
+        } else {
+            const base64 = await fileToBase64(file);
+            await updateDoc(doc(db, "payment_slips", slipDoc.id), {
+                base64,
+                storageProvider: "firestore_base64",
+                updatedAt: serverTimestamp()
+            });
+        }
 
         if (!storeSettings?.enableSlipVerify) {
             return {
@@ -477,6 +505,7 @@ export default function CheckoutPaymentPage() {
     }, [hasLocationShippingOptions, selectableShippingOptions, selectedShippingOptionId]);
 
     useEffect(() => {
+        if (orderCreatedRef.current) return;
         const saved = sessionStorage.getItem('checkout_address');
         if (!saved) {
             router.replace('/checkout/address');
@@ -693,6 +722,8 @@ export default function CheckoutPaymentPage() {
                 body: JSON.stringify({ orderId })
             }).catch(() => undefined);
 
+            orderCreatedRef.current = true;
+
             if (typeof window !== "undefined") {
                 sessionStorage.removeItem("checkout_address");
                 sessionStorage.removeItem("selected_shipping_location");
@@ -870,7 +901,9 @@ export default function CheckoutPaymentPage() {
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-xs font-semibold text-slate-900">{slipFile?.name || "ยังไม่ได้แนบสลิป"}</p>
                                                 <p className="mt-0.5 text-[10px] text-slate-400">
-                                                    {storeSettings.enableSlipVerify ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์" : "รูปภาพไม่เกิน 700KB"}
+                                                    {storeSettings.enableSlipVerify
+                                                        ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์"
+                                                        : `รูปภาพไม่เกิน ${storeSettings.useStorageForPaymentSlips ? "5MB" : "700KB"}`}
                                                 </p>
                                             </div>
                                             <label className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-bold text-white shadow-sm shadow-gray-900/20 transition hover:bg-gray-800 active:scale-[0.98]">

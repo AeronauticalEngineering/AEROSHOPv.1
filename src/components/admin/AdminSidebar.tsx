@@ -83,7 +83,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                         <div className="shrink-0 p-1.5 bg-white/10 rounded-lg border border-white/10">
                             <Store size={20} className="text-white" />
                         </div>
-                        <span className="truncate text-lg font-bold tracking-wide">Eshop Admin</span>
+                        <span className="truncate text-lg font-bold tracking-wide">Aero Shop</span>
                     </div>
                     <Link
                         href="/orders?status=pending"

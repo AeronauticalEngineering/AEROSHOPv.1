@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, addDoc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { useParams } from "next/navigation";
 import { Package, Clock, CheckCircle, Truck, XCircle, MapPin, CreditCard, Copy, Check, Loader2, RotateCcw, CircleAlert, UploadCloud } from "lucide-react";
 import { format } from "date-fns";
@@ -132,8 +133,8 @@ export default function OrderDetailPage() {
                     const slipDoc = slipSnap.docs[0];
                     const slipData = slipDoc.data();
                     setSlipDocId(slipDoc.id);
-                    if (slipData.base64) {
-                        setSlipPreview(slipData.base64);
+                    if (slipData.base64 || slipData.imageUrl) {
+                        setSlipPreview(slipData.base64 || slipData.imageUrl);
                     }
                     const manualMessage = "รอการตรวจสอบโดยเจ้าหน้าที่";
                     const enableVerify = settingsData?.enableSlipVerify === true;
@@ -205,8 +206,8 @@ export default function OrderDetailPage() {
                 const slipDoc = slipSnap.docs[0];
                 const slipData = slipDoc.data();
                 setSlipDocId(slipDoc.id);
-                if (slipData.base64) {
-                    setSlipPreview(slipData.base64);
+                if (slipData.base64 || slipData.imageUrl) {
+                    setSlipPreview(slipData.base64 || slipData.imageUrl);
                 }
 
                 const enableVerify = storeSettings?.enableSlipVerify === true;
@@ -383,6 +384,15 @@ export default function OrderDetailPage() {
             reader.readAsDataURL(file);
         });
 
+    const uploadSlipToStorage = async (file: File, slipId: string) => {
+        const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const storagePath = `payment_slips/${slipId}-${Date.now()}.${extension}`;
+        const storageRef = ref(storage, storagePath);
+        await uploadBytes(storageRef, file, { contentType: file.type || "image/jpeg" });
+        const imageUrl = await getDownloadURL(storageRef);
+        return { imageUrl, storagePath };
+    };
+
     const handleSendSlipResult = async (verifyResult: Record<string, unknown>, orderContext: Order) => {
         if (!liff || !liff.isInClient()) return;
         try {
@@ -487,9 +497,10 @@ export default function OrderDetailPage() {
         if (!file) return;
         setSlipError("");
 
-        const maxBytes = 700 * 1024;
+        const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
+        const maxBytes = useStorageForSlips ? 5 * 1024 * 1024 : 700 * 1024;
         if (file.size > maxBytes) {
-            setSlipError("ไฟล์ใหญ่เกินไป (จำกัด 700KB) โปรดบีบอัดรูป");
+            setSlipError(`ไฟล์ใหญ่เกินไป (จำกัด ${useStorageForSlips ? "5MB" : "700KB"}) โปรดบีบอัดรูป`);
             return;
         }
 
@@ -508,11 +519,11 @@ export default function OrderDetailPage() {
         setSlipUploading(true);
         setSlipError("");
         try {
-            const base64 = await fileToBase64(fileToUpload);
-            setSlipPreview(base64); // Update preview immediately
+            const localPreview = URL.createObjectURL(fileToUpload);
+            setSlipPreview(localPreview); // Update preview immediately
+            const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
 
-            const slipData = {
-                base64,
+            const slipData: Record<string, unknown> = {
                 mimeType: fileToUpload.type,
                 size: fileToUpload.size,
                 paymentMethod: order.paymentMethod || null,
@@ -531,6 +542,19 @@ export default function OrderDetailPage() {
             });
 
             if (slipDocId) {
+                if (useStorageForSlips) {
+                    const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, slipDocId);
+                    slipData.imageUrl = imageUrl;
+                    slipData.storagePath = storagePath;
+                    slipData.storageProvider = "firebase_storage";
+                    slipData.base64 = "";
+                    setSlipPreview(imageUrl);
+                } else {
+                    slipData.base64 = await fileToBase64(fileToUpload);
+                    slipData.imageUrl = "";
+                    slipData.storageProvider = "firestore_base64";
+                    setSlipPreview(String(slipData.base64));
+                }
                 await updateDoc(doc(db, "payment_slips", slipDocId), slipData);
                 await handleSendSlipResult({ isManualCheck: true }, order);
                 if (storeSettings?.enableSlipVerify) {
@@ -545,6 +569,24 @@ export default function OrderDetailPage() {
                     userId: order.userId || null,
                     createdAt: serverTimestamp()
                 });
+                if (useStorageForSlips) {
+                    const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, newDoc.id);
+                    await updateDoc(doc(db, "payment_slips", newDoc.id), {
+                        imageUrl,
+                        storagePath,
+                        storageProvider: "firebase_storage",
+                        updatedAt: serverTimestamp()
+                    });
+                    setSlipPreview(imageUrl);
+                } else {
+                    const base64 = await fileToBase64(fileToUpload);
+                    await updateDoc(doc(db, "payment_slips", newDoc.id), {
+                        base64,
+                        storageProvider: "firestore_base64",
+                        updatedAt: serverTimestamp()
+                    });
+                    setSlipPreview(base64);
+                }
                 setSlipDocId(newDoc.id);
                 await handleSendSlipResult({ isManualCheck: true }, order);
                 if (storeSettings?.enableSlipVerify) {
@@ -1105,9 +1147,13 @@ export default function OrderDetailPage() {
                                             <UploadCloud size={15} />
                                             แนบสลิป
                                         </span>
-                                        <span className="mt-0.5 block text-[10px] font-medium text-white/80">รูปภาพไม่เกิน 700KB</span>
+                                        <span className="mt-0.5 block text-[10px] font-medium text-white/80">
+                                            รูปภาพไม่เกิน {storeSettings?.useStorageForPaymentSlips ? "5MB" : "700KB"}
+                                        </span>
                                         <span className="block text-[10px] font-medium text-white/80">
-                                            {storeSettings?.enableSlipVerify ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์" : "รูปภาพไม่เกิน 700KB"}
+                                            {storeSettings?.enableSlipVerify
+                                                ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์"
+                                                : `รูปภาพไม่เกิน ${storeSettings?.useStorageForPaymentSlips ? "5MB" : "700KB"}`}
                                         </span>
                                     </label>
                                 )}

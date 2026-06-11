@@ -13,6 +13,26 @@ function parseBase64(data: string, fallbackType?: string) {
   return { buffer: Buffer.from(data, "base64"), mimeType: fallbackType || "image/jpeg" };
 }
 
+async function readSlipImage(slip: Record<string, unknown>) {
+  if (typeof slip.base64 === "string" && slip.base64) {
+    return parseBase64(slip.base64, typeof slip.mimeType === "string" ? slip.mimeType : undefined);
+  }
+
+  if (typeof slip.imageUrl === "string" && slip.imageUrl) {
+    const res = await fetch(slip.imageUrl);
+    if (!res.ok) {
+      throw new Error("Cannot download slip image");
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    return {
+      buffer: Buffer.from(arrayBuffer),
+      mimeType: res.headers.get("content-type") || (typeof slip.mimeType === "string" ? slip.mimeType : "image/jpeg")
+    };
+  }
+
+  return { buffer: null as Buffer | null, mimeType: typeof slip.mimeType === "string" ? slip.mimeType : "image/jpeg" };
+}
+
 function toNumber(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -103,9 +123,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "SlipOK config not set" }, { status: 400 });
     }
 
-    const { buffer, mimeType } = parseBase64(slip.base64, slip.mimeType);
+    const { buffer, mimeType } = await readSlipImage(slip);
     if (!buffer) {
-      return NextResponse.json({ error: "Missing base64" }, { status: 400 });
+      return NextResponse.json({ error: "Missing slip image" }, { status: 400 });
     }
 
     const form = new FormData();

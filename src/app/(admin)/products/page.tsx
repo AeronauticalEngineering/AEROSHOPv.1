@@ -8,8 +8,10 @@ import { Plus, Pencil, Trash2, Search, X, Box, Layers, Image as ImageIcon, Save,
 import { Product, ProductGuide } from "@/types/product";
 import { ProductCategory } from "@/types/category";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { fetchProductBase64ImageItems, getPrimaryProductImage, type ProductBase64Image } from "@/lib/productImages";
+import { StoreSettings } from "@/types/store";
 
 // --- Schema Validation ---
 const productSchema = z.object({
@@ -90,6 +92,7 @@ export default function AdminProductsPage() {
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
     const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+    const [useStorageForProductImages, setUseStorageForProductImages] = useState(false);
     const itemsPerPage = 10;
 
     const { register, control, handleSubmit, reset, setValue, watch, getValues, formState: { errors } } = useForm<ProductFormValues>({
@@ -210,6 +213,14 @@ export default function AdminProductsPage() {
                 ...doc.data()
             })) as ProductGuide[];
             setProductGuides(items);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(doc(db, "settings", "store"), (snapshot) => {
+            const data = snapshot.exists() ? snapshot.data() as StoreSettings : null;
+            setUseStorageForProductImages(Boolean(data?.useStorageForProductImages));
         });
         return () => unsubscribe();
     }, []);
@@ -348,10 +359,10 @@ export default function AdminProductsPage() {
     const handleImageFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
-        const maxBytes = 700 * 1024;
+        const maxBytes = useStorageForProductImages ? 5 * 1024 * 1024 : 700 * 1024;
         const tooLarge = files.find((file) => file.size > maxBytes);
         if (tooLarge) {
-            setImageFileError("ไฟล์ใหญ่เกินไป (จำกัด 700KB) โปรดบีบอัดรูป");
+            setImageFileError(`ไฟล์ใหญ่เกินไป (จำกัด ${useStorageForProductImages ? "5MB" : "700KB"}) โปรดบีบอัดรูป`);
             return;
         }
         setImageFileError("");
@@ -467,6 +478,20 @@ export default function AdminProductsPage() {
         return ids;
     };
 
+    const saveStorageImages = async (productId: string) => {
+        if (imageFiles.length === 0) return [];
+        const urls: string[] = [];
+        for (const file of imageFiles) {
+            const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+            const storageRef = ref(storage, `products/${productId}/${Date.now()}-${generateId()}.${extension}`);
+            await uploadBytes(storageRef, file, {
+                contentType: file.type || "image/jpeg"
+            });
+            urls.push(await getDownloadURL(storageRef));
+        }
+        return urls;
+    };
+
     const onSubmit = async (data: ProductFormValues) => {
         const isBundleProduct = data.productType === "bundle";
         const normalizedOptions = (data.options || []).map((option, index) => ({
@@ -566,17 +591,37 @@ export default function AdminProductsPage() {
 
             if (editingProduct) {
                 await updateDoc(doc(db, "products", editingProduct.id), productData);
-                const newBase64Ids = await saveBase64Images(editingProduct.id);
-                if (newBase64Ids.length > 0) {
-                    await updateDoc(doc(db, "products", editingProduct.id), {
-                        imageBase64Ids: [...existingBase64Ids, ...newBase64Ids]
-                    });
+                if (useStorageForProductImages) {
+                    const newStorageUrls = await saveStorageImages(editingProduct.id);
+                    if (newStorageUrls.length > 0) {
+                        await updateDoc(doc(db, "products", editingProduct.id), {
+                            imageUrls: [...cleanedImageUrls, ...newStorageUrls],
+                            imageUrl: cleanedImageUrls[0] || newStorageUrls[0] || ""
+                        });
+                    }
+                } else {
+                    const newBase64Ids = await saveBase64Images(editingProduct.id);
+                    if (newBase64Ids.length > 0) {
+                        await updateDoc(doc(db, "products", editingProduct.id), {
+                            imageBase64Ids: [...existingBase64Ids, ...newBase64Ids]
+                        });
+                    }
                 }
             } else {
                 const docRef = await addDoc(collection(db, "products"), { ...productData, createdAt: serverTimestamp() });
-                const newBase64Ids = await saveBase64Images(docRef.id);
-                if (newBase64Ids.length > 0) {
-                    await updateDoc(docRef, { imageBase64Ids: newBase64Ids });
+                if (useStorageForProductImages) {
+                    const newStorageUrls = await saveStorageImages(docRef.id);
+                    if (newStorageUrls.length > 0) {
+                        await updateDoc(docRef, {
+                            imageUrls: [...cleanedImageUrls, ...newStorageUrls],
+                            imageUrl: cleanedImageUrls[0] || newStorageUrls[0] || ""
+                        });
+                    }
+                } else {
+                    const newBase64Ids = await saveBase64Images(docRef.id);
+                    if (newBase64Ids.length > 0) {
+                        await updateDoc(docRef, { imageBase64Ids: newBase64Ids });
+                    }
                 }
             }
             closeModal();
@@ -723,6 +768,14 @@ export default function AdminProductsPage() {
                 product.category === selectedCategory;
 
             return matchesSearch && matchesCategory;
+        }).sort((a, b) => {
+            const aSku = a.sku?.trim() || "";
+            const bSku = b.sku?.trim() || "";
+            if (aSku && !bSku) return -1;
+            if (!aSku && bSku) return 1;
+            const skuCompare = aSku.localeCompare(bSku, "th", { numeric: true, sensitivity: "base" });
+            if (skuCompare !== 0) return skuCompare;
+            return a.name.localeCompare(b.name, "th", { numeric: true, sensitivity: "base" });
         });
     }, [products, searchTerm, selectedCategory]);
 
@@ -1094,7 +1147,9 @@ export default function AdminProductsPage() {
                                                     <p className="text-[10px] text-gray-400 mt-1">ลิงก์แรกจะเป็นรูปหลักของสินค้า</p>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">อัปโหลดรูปภาพ (เก็บ Base64 แยก)</label>
+                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">
+                                                        อัปโหลดรูปภาพ ({useStorageForProductImages ? "เก็บใน Firebase Storage" : "เก็บ Base64 แยก"})
+                                                    </label>
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <label
                                                             htmlFor="product-image-files"
@@ -1167,7 +1222,11 @@ export default function AdminProductsPage() {
                                                             ))}
                                                         </div>
                                                     )}
-                                                    <p className="text-[10px] text-gray-400 mt-1">ไฟล์จะถูกเก็บแยกใน collection สำหรับ Base64</p>
+                                                    <p className="text-[10px] text-gray-400 mt-1">
+                                                        {useStorageForProductImages
+                                                            ? "ไฟล์ใหม่จะถูกอัปโหลดไป Firebase Storage และบันทึก URL ในสินค้า"
+                                                            : "ไฟล์จะถูกเก็บแยกใน collection สำหรับ Base64"}
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-semibold text-gray-500 mb-1">รายละเอียด</label>

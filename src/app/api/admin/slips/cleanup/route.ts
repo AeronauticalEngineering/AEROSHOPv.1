@@ -12,6 +12,51 @@ function getCutoffDate(months: number) {
   return cutoff;
 }
 
+function getStorageBucketName() {
+  return process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "";
+}
+
+function isNotFoundStorageError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  return normalized.includes("not found") || normalized.includes("no such object") || normalized.includes("404");
+}
+
+async function deleteStorageObjects(storagePaths: string[]) {
+  const bucketName = getStorageBucketName();
+  if (!bucketName || storagePaths.length === 0) {
+    return {
+      deletedStorageCount: 0,
+      failedStorageDeleteCount: 0,
+      storageDeleteSkipped: !bucketName && storagePaths.length > 0
+    };
+  }
+
+  const bucket = admin.storage().bucket(bucketName);
+  let deletedStorageCount = 0;
+  let failedStorageDeleteCount = 0;
+
+  await Promise.all(storagePaths.map(async (storagePath) => {
+    try {
+      await bucket.file(storagePath).delete();
+      deletedStorageCount += 1;
+    } catch (error) {
+      if (isNotFoundStorageError(error)) {
+        deletedStorageCount += 1;
+        return;
+      }
+      failedStorageDeleteCount += 1;
+      console.error("Failed to delete slip storage object:", storagePath, error);
+    }
+  }));
+
+  return {
+    deletedStorageCount,
+    failedStorageDeleteCount,
+    storageDeleteSkipped: false
+  };
+}
+
 export async function POST(req: Request) {
   try {
     if (!isFirebaseAdminReady()) {
@@ -35,6 +80,9 @@ export async function POST(req: Request) {
     const cutoffDate = getCutoffDate(months);
     const cutoffTimestamp = admin.firestore.Timestamp.fromDate(cutoffDate);
     let deletedCount = 0;
+    let deletedStorageCount = 0;
+    let failedStorageDeleteCount = 0;
+    let storageDeleteSkipped = false;
 
     while (true) {
       const snap = await db
@@ -46,6 +94,14 @@ export async function POST(req: Request) {
       if (snap.empty) {
         break;
       }
+
+      const storagePaths = snap.docs
+        .map((item) => item.data()?.storagePath)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+      const storageResult = await deleteStorageObjects(storagePaths);
+      deletedStorageCount += storageResult.deletedStorageCount;
+      failedStorageDeleteCount += storageResult.failedStorageDeleteCount;
+      storageDeleteSkipped = storageDeleteSkipped || storageResult.storageDeleteSkipped;
 
       const batch = db.batch();
       snap.docs.forEach((item) => batch.delete(item.ref));
@@ -62,6 +118,9 @@ export async function POST(req: Request) {
       months,
       cutoffDate: cutoffDate.toISOString(),
       deletedCount,
+      deletedStorageCount,
+      failedStorageDeleteCount,
+      storageDeleteSkipped,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

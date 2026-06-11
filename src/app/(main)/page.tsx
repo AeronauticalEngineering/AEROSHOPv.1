@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, limit, startAfter, QueryDocumentSnapshot, onSnapshot, QueryConstraint, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Product } from "@/types/product";
 import { ProductCategory } from "@/types/category";
@@ -15,6 +15,7 @@ import { th } from "date-fns/locale";
 import { Promotion, usePromotions } from "@/context/PromotionContext";
 import { useCoupons } from "@/hooks/useCoupons";
 import { fetchProductBase64Images, getPrimaryProductImage } from "@/lib/productImages";
+import { getProductDisplayStock } from "@/lib/productStock";
 
 const formatImageUrl = (url?: string) => {
     const value = url?.trim();
@@ -38,6 +39,7 @@ const ALL_CATEGORY = "ทั้งหมด";
 export default function ShopHome() {
     const [products, setProducts] = useState<Product[]>([]);
     const [productBase64Images, setProductBase64Images] = useState<Record<string, string[]>>({});
+    const [bundleProducts, setBundleProducts] = useState<Record<string, Product>>({});
     const [categoryDocs, setCategoryDocs] = useState<ProductCategory[]>([]);
     const { promotions } = usePromotions();
     const [loading, setLoading] = useState(true);
@@ -48,6 +50,9 @@ export default function ShopHome() {
 
     // Pagination State
     const lastVisibleRef = useRef<QueryDocumentSnapshot | null>(null);
+    const fetchRequestIdRef = useRef(0);
+    const isFetchingMoreRef = useRef(false);
+    const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
     const [hasMore, setHasMore] = useState(true);
     const [isFetchingMore, setIsFetchingMore] = useState(false);
     const PRODUCTS_PER_PAGE = 10;
@@ -55,29 +60,40 @@ export default function ShopHome() {
     const { userProfile, loading: authLoading } = useAuth();
     const [pendingOrders, setPendingOrders] = useState<PendingOrderAlert[]>([]);
 
-    const fetchProducts = useCallback(async (isLoadMore = false) => {
+    const fetchProducts = useCallback(async (isLoadMore = false, category = selectedCategory) => {
+        if (isLoadMore && isFetchingMoreRef.current) return;
+
+        const requestId = ++fetchRequestIdRef.current;
         try {
-            if (isLoadMore) setIsFetchingMore(true);
-            else setLoading(true);
-
-            let productsQuery = query(
-                collection(db, "products"),
-                where("isActive", "==", true),
-                orderBy("updatedAt", "desc"),
-                limit(PRODUCTS_PER_PAGE)
-            );
-
-            if (isLoadMore && lastVisibleRef.current) {
-                productsQuery = query(
-                    collection(db, "products"),
-                    where("isActive", "==", true),
-                    orderBy("updatedAt", "desc"),
-                    startAfter(lastVisibleRef.current),
-                    limit(PRODUCTS_PER_PAGE)
-                );
+            if (isLoadMore) {
+                isFetchingMoreRef.current = true;
+                setIsFetchingMore(true);
+            }
+            else {
+                setLoading(true);
+                setProducts([]);
+                lastVisibleRef.current = null;
             }
 
+            const constraints: QueryConstraint[] = [
+                where("isActive", "==", true)
+            ];
+
+            if (category !== ALL_CATEGORY) {
+                constraints.push(where("category", "==", category));
+            }
+
+            constraints.push(orderBy("updatedAt", "desc"));
+
+            if (isLoadMore && lastVisibleRef.current) {
+                constraints.push(startAfter(lastVisibleRef.current));
+            }
+
+            constraints.push(limit(PRODUCTS_PER_PAGE));
+
+            const productsQuery = query(collection(db, "products"), ...constraints);
             const documentSnapshots = await getDocs(productsQuery);
+            if (requestId !== fetchRequestIdRef.current) return;
 
             if (!documentSnapshots.empty) {
                 const newProducts = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Product[];
@@ -99,19 +115,46 @@ export default function ShopHome() {
             } else {
                 lastVisibleRef.current = null;
                 setHasMore(false);
+                if (!isLoadMore) {
+                    setProducts([]);
+                }
             }
 
         } catch (error) {
             console.error("Error fetching products:", error);
         } finally {
-            setLoading(false);
-            setIsFetchingMore(false);
+            if (isLoadMore) {
+                isFetchingMoreRef.current = false;
+            }
+
+            if (requestId === fetchRequestIdRef.current) {
+                setLoading(false);
+                setIsFetchingMore(false);
+            }
         }
-    }, []);
+    }, [selectedCategory]);
 
     useEffect(() => {
-        fetchProducts();
-    }, [fetchProducts]);
+        fetchProducts(false, selectedCategory);
+    }, [fetchProducts, selectedCategory]);
+
+    useEffect(() => {
+        const trigger = loadMoreTriggerRef.current;
+        if (!trigger || loading || isFetchingMore || !hasMore || searchTerm) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    fetchProducts(true, selectedCategory);
+                }
+            },
+            { rootMargin: "320px 0px" }
+        );
+
+        observer.observe(trigger);
+
+        return () => observer.disconnect();
+    }, [fetchProducts, hasMore, isFetchingMore, loading, searchTerm, selectedCategory]);
 
     useEffect(() => {
         let isCancelled = false;
@@ -142,6 +185,41 @@ export default function ShopHome() {
             isCancelled = true;
         };
     }, [products]);
+
+    useEffect(() => {
+        let isCancelled = false;
+        const loadBundleProducts = async () => {
+            const productIds = Array.from(new Set(
+                products
+                    .filter((product) => product.productType === "bundle")
+                    .flatMap((product) => product.bundleItems?.map((item) => item.productId).filter(Boolean) || [])
+            ));
+            const missingProductIds = productIds.filter((productId) => !bundleProducts[productId]);
+            if (missingProductIds.length === 0) return;
+
+            const childProducts = await Promise.all(
+                missingProductIds.map(async (productId) => {
+                    const childSnap = await getDoc(doc(db, "products", productId));
+                    return childSnap.exists() ? ({ id: childSnap.id, ...childSnap.data() } as Product) : null;
+                })
+            );
+
+            if (!isCancelled) {
+                setBundleProducts((prev) => ({
+                    ...prev,
+                    ...Object.fromEntries(childProducts.filter(Boolean).map((product) => [product!.id, product!]))
+                }));
+            }
+        };
+
+        loadBundleProducts().catch((error) => {
+            console.error("Error loading bundle products:", error);
+        });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [bundleProducts, products]);
 
     useEffect(() => {
         const q = query(
@@ -336,7 +414,7 @@ export default function ShopHome() {
                                             src: selectedCategoryNoticeImageSrc,
                                             alt: selectedCategoryNotice.noticeImageName || selectedCategoryNotice.name
                                         })}
-                                        className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300 bg-white/80 text-sky-800 shadow-sm hover:bg-white"
+                                        className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-sky-700 bg-sky-600 text-white shadow-md shadow-sky-900/20 transition-colors hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2 focus:ring-offset-sky-50"
                                         aria-label="ดูรูปประกอบ"
                                     >
                                         <ImageIcon size={15} />
@@ -489,6 +567,7 @@ export default function ShopHome() {
 
                                 const hasDiscount = bestPromo && finalPrice < product.price;
                                 const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]);
+                                const displayStock = getProductDisplayStock(product, bundleProducts);
 
                                 return (
                                     <Link href={`/product/${product.id}`} key={product.id} className="block group">
@@ -508,7 +587,7 @@ export default function ShopHome() {
                                                 {/* Badges Container */}
                                                 <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
                                                     {/* Stock Badge */}
-                                                    {product.stock === 0 && (
+                                                    {displayStock === 0 && (
                                                         <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                                                             หมด
                                                         </div>
@@ -552,12 +631,11 @@ export default function ShopHome() {
                             })}
                         </div>
 
-                        {/* Load More Button */}
+                        {/* Auto Load More Trigger */}
                         {hasMore && !searchTerm && (
-                            <button
-                                onClick={() => fetchProducts(true)}
-                                disabled={isFetchingMore}
-                                className="w-full py-3 bg-white border border-gray-200 rounded-xl text-gray-600 font-medium text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                            <div
+                                ref={loadMoreTriggerRef}
+                                className="flex min-h-12 items-center justify-center gap-2 py-3 text-sm font-medium text-gray-500"
                             >
                                 {isFetchingMore ? (
                                     <>
@@ -567,7 +645,7 @@ export default function ShopHome() {
                                 ) : (
                                     'โหลดเพิ่มเติม'
                                 )}
-                            </button>
+                            </div>
                         )}
 
                         {!hasMore && products.length > 0 && !searchTerm && (
