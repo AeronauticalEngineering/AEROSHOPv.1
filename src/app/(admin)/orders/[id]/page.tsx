@@ -107,6 +107,8 @@ export default function AdminOrderDetailPage() {
     const [isEditingItems, setIsEditingItems] = useState(false);
     const [savingItems, setSavingItems] = useState(false);
     const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+    const [issueReplyDrafts, setIssueReplyDrafts] = useState<Record<string, string>>({});
+    const [savingIssueReplyKey, setSavingIssueReplyKey] = useState<string | null>(null);
 
     useEffect(() => {
         if (!orderId) return;
@@ -144,6 +146,15 @@ export default function AdminOrderDetailPage() {
                 ...item,
                 bundleItems: item.bundleItems?.map((bundleItem) => ({ ...bundleItem }))
             })));
+            setIssueReplyDrafts(Object.fromEntries(
+                order.items.flatMap((item, index) => [
+                    [`${index}`, item.issueAdminReply || ""],
+                    ...(item.bundleItems?.map((bundleItem, bundleIndex) => [
+                        `${index}-${bundleIndex}`,
+                        bundleItem.issueAdminReply || ""
+                    ] as const) || [])
+                ])
+            ));
             setIsEditingItems(false);
         }
     }, [order]);
@@ -392,6 +403,47 @@ export default function AdminOrderDetailPage() {
             setIsEditingItems(false);
         } finally {
             setSavingItems(false);
+        }
+    };
+
+    const saveIssueReply = async (itemIndex: number, bundleItemIndex: number | null = null) => {
+        if (!order || savingIssueReplyKey) return;
+        const item = order.items[itemIndex];
+        if (!item) return;
+
+        const draftKey = bundleItemIndex === null ? `${itemIndex}` : `${itemIndex}-${bundleItemIndex}`;
+        const reply = (issueReplyDrafts[draftKey] || "").trim();
+        const nextItems = order.items.map((item, index) => {
+            if (index !== itemIndex) return item;
+            if (bundleItemIndex === null) {
+                return {
+                    ...item,
+                    issueAdminReply: reply,
+                    issueAdminRepliedAt: reply ? new Date().toISOString() : ""
+                };
+            }
+            return {
+                ...item,
+                bundleItems: item.bundleItems?.map((bundleItem, index) => (
+                    index === bundleItemIndex
+                        ? {
+                            ...bundleItem,
+                            issueAdminReply: reply,
+                            issueAdminRepliedAt: reply ? new Date().toISOString() : ""
+                        }
+                        : bundleItem
+                ))
+            };
+        });
+
+        try {
+            setSavingIssueReplyKey(`${order.id}-${draftKey}`);
+            await updateDoc(doc(db, "orders", order.id), {
+                items: nextItems,
+                updatedAt: serverTimestamp()
+            });
+        } finally {
+            setSavingIssueReplyKey(null);
         }
     };
 
@@ -731,11 +783,38 @@ export default function AdminOrderDetailPage() {
                                                                 ฿{(toNumber(bundleItem.unitPrice) * toNumber(bundleItem.quantity) * toNumber(item.quantity)).toLocaleString()}
                                                             </p>
                                                         </div>
+                                                        {(bundleItem.issueReason || bundleItem.issueAdminReply || bundleItem.status === "cancelled" || bundleItem.status === "returned") && (
+                                                            <div className="xl:col-span-4">
+                                                                <IssueReplyBox
+                                                                    compact
+                                                                    reason={bundleItem.issueReason}
+                                                                    reportedAt={bundleItem.issueReportedAt}
+                                                                    reply={bundleItem.issueAdminReply}
+                                                                    repliedAt={bundleItem.issueAdminRepliedAt}
+                                                                    draftValue={issueReplyDrafts[`${index}-${bundleIndex}`] || ""}
+                                                                    onDraftChange={(value) => setIssueReplyDrafts((prev) => ({ ...prev, [`${index}-${bundleIndex}`]: value }))}
+                                                                    onSave={() => saveIssueReply(index, bundleIndex)}
+                                                                    isSaving={savingIssueReplyKey === `${order.id}-${index}-${bundleIndex}`}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
                                     ) : null}
+                                    {(item.issueReason || item.issueAdminReply || item.status === "cancelled" || item.status === "returned") && (
+                                        <IssueReplyBox
+                                            reason={item.issueReason}
+                                            reportedAt={item.issueReportedAt}
+                                            reply={item.issueAdminReply}
+                                            repliedAt={item.issueAdminRepliedAt}
+                                            draftValue={issueReplyDrafts[`${index}`] || ""}
+                                            onDraftChange={(value) => setIssueReplyDrafts((prev) => ({ ...prev, [`${index}`]: value }))}
+                                            onSave={() => saveIssueReply(index)}
+                                            isSaving={savingIssueReplyKey === `${order.id}-${index}`}
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -834,6 +913,67 @@ function AddOnEditor({
                 className="h-7 rounded-md border border-gray-200 bg-white px-2 text-right text-[11px] font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-800"
                 aria-label="ราคาบริการเสริม"
             />
+        </div>
+    );
+}
+
+function IssueReplyBox({
+    reason,
+    reportedAt,
+    reply,
+    repliedAt,
+    draftValue,
+    onDraftChange,
+    onSave,
+    isSaving,
+    compact = false
+}: {
+    reason?: string;
+    reportedAt?: string;
+    reply?: string;
+    repliedAt?: string;
+    draftValue: string;
+    onDraftChange: (value: string) => void;
+    onSave: () => void;
+    isSaving: boolean;
+    compact?: boolean;
+}) {
+    return (
+        <div className={`mt-2 rounded-md border border-amber-100 bg-amber-50/60 ${compact ? "p-2" : "p-2.5"}`}>
+            <div className={`grid gap-2 ${compact ? "lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)]"}`}>
+                <div className="min-w-0 text-[11px]">
+                    <p className="font-bold text-amber-900">แจ้งปัญหา</p>
+                    <p className="mt-0.5 whitespace-pre-line leading-4 text-amber-800">{reason || "ไม่มีข้อความจากลูกค้า"}</p>
+                    {reportedAt && (
+                        <p className="mt-0.5 text-[10px] text-amber-600">
+                            {new Date(reportedAt).toLocaleString("th-TH")}
+                        </p>
+                    )}
+                </div>
+                <div className="min-w-0">
+                    <textarea
+                        value={draftValue}
+                        onChange={(event) => onDraftChange(event.target.value)}
+                        rows={compact ? 2 : 3}
+                        className="w-full resize-y rounded-md border border-amber-200 bg-white px-2 py-1.5 text-[11px] text-gray-800 outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
+                        placeholder="ตอบกลับลูกค้า"
+                    />
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate text-[10px] text-gray-500">
+                            {repliedAt ? `ตอบล่าสุด ${new Date(repliedAt).toLocaleString("th-TH")}` : reply ? "มีข้อความตอบกลับแล้ว" : "ยังไม่ได้ตอบ"}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={onSave}
+                            disabled={isSaving}
+                            className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md bg-amber-700 px-2.5 text-[11px] font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {isSaving && <Loader2 size={11} className="animate-spin" />}
+                            บันทึก
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

@@ -37,6 +37,10 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const orderId = typeof body?.orderId === "string" ? body.orderId : "";
     const itemIndex = Number(body?.itemIndex);
+    const rawBundleItemIndex = Number(body?.bundleItemIndex);
+    const bundleItemIndex = Number.isInteger(rawBundleItemIndex) && rawBundleItemIndex >= 0
+      ? rawBundleItemIndex
+      : null;
     const issueStatus = isIssueStatus(body?.issueStatus) ? body.issueStatus : undefined;
     const issueReason = typeof body?.issueReason === "string" ? body.issueReason.trim() : "";
 
@@ -55,6 +59,11 @@ export async function POST(req: Request) {
     const item = items[itemIndex];
     if (!item) {
       return NextResponse.json({ error: "Order item not found" }, { status: 404 });
+    }
+    const bundleItems = Array.isArray(item.bundleItems) ? item.bundleItems.map(asRecord) : [];
+    const issueItem = bundleItemIndex === null ? item : bundleItems[bundleItemIndex];
+    if (!issueItem) {
+      return NextResponse.json({ error: "Order bundle item not found" }, { status: 404 });
     }
 
     const settingsSnap = await db.doc("settings/store").get();
@@ -76,7 +85,7 @@ export async function POST(req: Request) {
       amount: Number.isFinite(amount) ? amount : 0,
       customerName: typeof order.customerName === "string" ? order.customerName : undefined,
       customerPhone: typeof order.customerPhone === "string" ? order.customerPhone : undefined,
-      itemName: typeof item.productName === "string" ? item.productName : undefined,
+      itemName: typeof issueItem.productName === "string" ? issueItem.productName : undefined,
       issueStatus,
       issueReason,
       liffId

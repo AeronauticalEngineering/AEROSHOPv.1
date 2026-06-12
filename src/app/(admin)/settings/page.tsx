@@ -21,7 +21,8 @@ import {
     Database,
     Trash2,
     Plus,
-    MapPin
+    MapPin,
+    ExternalLink
 } from "lucide-react";
 
 type FirestoreUsage = {
@@ -75,6 +76,17 @@ type StorageRuleCheck = {
     status: "idle" | "checking" | "ok" | "failed";
     message: string;
     checkedAt?: string;
+};
+
+type FirestoreIndexCheckResult = {
+    id: string;
+    title: string;
+    source: string;
+    collection: string;
+    fields: string[];
+    status: "ready" | "missing" | "error";
+    createUrl?: string | null;
+    error?: string | null;
 };
 
 function formatBytes(bytes?: number | null) {
@@ -199,7 +211,7 @@ export default function AdminSettingsPage() {
         lineNotifyCustomerShipped: true,
         lineNotifyCustomerCancelled: true,
     });
-    const [activeTab, setActiveTab] = useState<'store' | 'payment' | 'firestore' | 'shipping' | 'pickup' | 'line'>('store');
+    const [activeTab, setActiveTab] = useState<'store' | 'payment' | 'firestore' | 'indexes' | 'shipping' | 'pickup' | 'line'>('store');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -218,6 +230,10 @@ export default function AdminSettingsPage() {
         status: "idle",
         message: "ยังไม่ได้ตรวจสอบ"
     });
+    const [indexCheckResults, setIndexCheckResults] = useState<FirestoreIndexCheckResult[]>([]);
+    const [indexCheckLoading, setIndexCheckLoading] = useState(false);
+    const [indexCheckError, setIndexCheckError] = useState("");
+    const [indexCheckedAt, setIndexCheckedAt] = useState("");
     const [slipCleanupLoadingMonth, setSlipCleanupLoadingMonth] = useState<number | null>(null);
     const [slipCleanupMessage, setSlipCleanupMessage] = useState("");
 
@@ -523,6 +539,25 @@ export default function AdminSettingsPage() {
         }
     };
 
+    const fetchIndexChecks = async () => {
+        setIndexCheckLoading(true);
+        setIndexCheckError("");
+        try {
+            const res = await fetch("/api/admin/firestore/index-check");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data?.error || "ตรวจสอบ Indexes ไม่สำเร็จ");
+            }
+            setIndexCheckResults(Array.isArray(data?.results) ? data.results : []);
+            setIndexCheckedAt(typeof data?.checkedAt === "string" ? data.checkedAt : new Date().toISOString());
+        } catch (error) {
+            setIndexCheckError((error as Error).message);
+            setIndexCheckResults([]);
+        } finally {
+            setIndexCheckLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab !== "line") return;
         fetchLineQuota();
@@ -533,6 +568,11 @@ export default function AdminSettingsPage() {
         fetchFirestoreUsage();
         fetchStorageUsage();
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab !== "indexes" || indexCheckResults.length > 0 || indexCheckLoading) return;
+        fetchIndexChecks();
+    }, [activeTab, indexCheckLoading, indexCheckResults.length]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -645,6 +685,7 @@ export default function AdminSettingsPage() {
                     { id: 'store', label: 'ข้อมูลร้านค้า' },
                     { id: 'payment', label: 'ตั้งค่าการชำระเงิน' },
                     { id: 'firestore', label: 'Firestore Usage' },
+                    { id: 'indexes', label: 'Firestore Indexes' },
                     { id: 'shipping', label: 'การจัดส่ง' },
                     { id: 'pickup', label: 'สถานที่รับ' },
                     { id: 'line', label: 'การแจ้งเตือน LINE' },
@@ -1291,6 +1332,115 @@ export default function AdminSettingsPage() {
                                 <p className="text-xs text-red-700">{slipCleanupMessage}</p>
                             )}
                         </div>
+                    </div>
+                </section>
+                )}
+
+                {activeTab === 'indexes' && (
+                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="px-3 py-2.5 border-b border-gray-100 flex flex-col gap-2 bg-gray-50 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-md bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                <Database size={16} />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold text-gray-900">Firestore Indexes</h2>
+                                <p className="text-xs text-gray-500">ตรวจสอบ Composite Indexes ที่จำเป็น และกดลิงก์เพื่อสร้างใน Firebase Console</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={fetchIndexChecks}
+                                disabled={indexCheckLoading}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-60"
+                            >
+                                <RefreshCw size={12} className={indexCheckLoading ? "animate-spin" : ""} />
+                                ตรวจสอบ Indexes
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-3 space-y-3">
+                        {indexCheckError && (
+                            <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{indexCheckError}</div>
+                        )}
+
+                        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                            {indexCheckLoading && indexCheckResults.length === 0 ? (
+                                <div className="flex items-center justify-center p-8 text-sm text-gray-500">
+                                    <Loader2 className="mr-2 animate-spin" size={16} />
+                                    กำลังตรวจสอบ Composite Indexes...
+                                </div>
+                            ) : indexCheckResults.length === 0 ? (
+                                <div className="p-4 text-sm text-gray-500">
+                                    กด “ตรวจสอบ Indexes” เพื่อให้ระบบทดสอบ query สำคัญและสร้างลิงก์สำหรับ Index ที่ยังขาด
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-gray-100">
+                                {indexCheckResults.map((item) => {
+                                    const statusClass = item.status === "ready"
+                                        ? "bg-green-50 text-green-700 border-green-100"
+                                        : item.status === "missing"
+                                            ? "bg-amber-50 text-amber-700 border-amber-100"
+                                            : "bg-red-50 text-red-700 border-red-100";
+                                    const statusLabel = item.status === "ready"
+                                        ? "พร้อมใช้งาน"
+                                        : item.status === "missing"
+                                            ? "ต้องสร้าง"
+                                            : "ตรวจไม่สำเร็จ";
+                                    return (
+                                        <div key={item.id} className="grid gap-2 px-3 py-2.5 text-xs md:grid-cols-[108px_112px_1fr_1.2fr_96px] md:items-center">
+                                            <div>
+                                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${statusClass}`}>
+                                                    {statusLabel}
+                                                </span>
+                                            </div>
+                                            <div className="font-mono font-bold text-gray-900">{item.collection}</div>
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold text-gray-800">{item.title}</p>
+                                                <p className="truncate text-[11px] text-gray-500">{item.source}</p>
+                                            </div>
+                                            <div className="flex min-w-0 flex-wrap gap-1">
+                                                {item.fields.map((field) => (
+                                                    <span key={field} className="rounded-md bg-gray-50 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 ring-1 ring-gray-100">
+                                                        {field}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <div className="flex justify-start md:justify-end">
+                                                    {item.status === "error" && item.error && (
+                                                    <span className="line-clamp-1 text-[11px] text-red-600" title={item.error}>{item.error}</span>
+                                                )}
+                                                {item.status === "missing" && item.createUrl ? (
+                                                    <a
+                                                        href={item.createUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md bg-amber-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                        สร้าง
+                                                    </a>
+                                                ) : item.status === "ready" ? (
+                                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-600 px-2.5 py-1.5 text-[11px] font-bold text-white">
+                                                        <Check size={12} />
+                                                        พร้อม
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                </div>
+                            )}
+                        </div>
+
+                        {indexCheckedAt && (
+                            <div className="rounded-md border border-gray-100 bg-white px-3 py-2 text-xs text-gray-500">
+                                ตรวจล่าสุด: {new Date(indexCheckedAt).toLocaleString("th-TH")}
+                            </div>
+                        )}
                     </div>
                 </section>
                 )}

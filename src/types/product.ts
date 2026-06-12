@@ -32,6 +32,11 @@ export interface ProductBundleItem {
     pickupOptionId?: string | null;
     pickupLabel?: string | null;
     pickupDetail?: string | null;
+    issueReason?: string;
+    issueReportedAt?: string;
+    issueReportedByCustomer?: boolean;
+    issueAdminReply?: string;
+    issueAdminRepliedAt?: string;
 }
 
 export interface ProductAddOn {

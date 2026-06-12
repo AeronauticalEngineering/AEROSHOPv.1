@@ -83,6 +83,7 @@ export default function OrderDetailPage() {
     const [refundChannel, setRefundChannel] = useState("");
     const [cancelError, setCancelError] = useState("");
     const [issueItemIndex, setIssueItemIndex] = useState<number | null>(null);
+    const [issueBundleItemIndex, setIssueBundleItemIndex] = useState<number | null>(null);
     const [issueStatus, setIssueStatus] = useState<Extract<OrderItemStatus, 'cancelled' | 'returned'>>('returned');
     const [issueReason, setIssueReason] = useState("");
     const [issueError, setIssueError] = useState("");
@@ -273,19 +274,23 @@ export default function OrderDetailPage() {
         }));
     };
 
-    const openIssueModal = (index: number) => {
+    const openIssueModal = (index: number, bundleIndex: number | null = null) => {
         const item = order?.items[index];
         if (!item || order?.status === 'cancelled') return;
+        const issueTarget = bundleIndex === null ? item : item.bundleItems?.[bundleIndex];
+        if (!issueTarget) return;
 
         setIssueItemIndex(index);
-        setIssueStatus(item.status === 'cancelled' || item.status === 'returned' ? item.status : 'returned');
-        setIssueReason(item.issueReason || "");
+        setIssueBundleItemIndex(bundleIndex);
+        setIssueStatus(issueTarget.status === 'cancelled' || issueTarget.status === 'returned' ? issueTarget.status : 'returned');
+        setIssueReason(issueTarget.issueReason || "");
         setIssueError("");
     };
 
     const closeIssueModal = () => {
         if (isSubmittingIssue) return;
         setIssueItemIndex(null);
+        setIssueBundleItemIndex(null);
         setIssueStatus('returned');
         setIssueReason("");
         setIssueError("");
@@ -295,8 +300,9 @@ export default function OrderDetailPage() {
         if (!order || issueItemIndex === null) return;
         const reason = issueReason.trim();
         const issueItem = order.items[issueItemIndex];
+        const issueTarget = issueBundleItemIndex === null ? issueItem : issueItem?.bundleItems?.[issueBundleItemIndex];
 
-        if (!issueItem) {
+        if (!issueItem || !issueTarget) {
             setIssueError("ไม่พบรายการสินค้าที่ต้องการแจ้งปัญหา");
             return;
         }
@@ -306,17 +312,24 @@ export default function OrderDetailPage() {
             return;
         }
 
-        const nextItems = order.items.map((item, index) => (
-            index === issueItemIndex
-                ? {
-                    ...item,
-                    status: issueStatus,
-                    issueReason: reason,
-                    issueReportedAt: new Date().toISOString(),
-                    issueReportedByCustomer: true
-                }
-                : item
-        ));
+        const issuePatch = {
+            status: issueStatus,
+            issueReason: reason,
+            issueReportedAt: new Date().toISOString(),
+            issueReportedByCustomer: true
+        };
+        const nextItems = order.items.map((item, index) => {
+            if (index !== issueItemIndex) return item;
+            if (issueBundleItemIndex === null) {
+                return { ...item, ...issuePatch };
+            }
+            return {
+                ...item,
+                bundleItems: item.bundleItems?.map((bundleItem, bundleIndex) => (
+                    bundleIndex === issueBundleItemIndex ? { ...bundleItem, ...issuePatch } : bundleItem
+                ))
+            };
+        });
 
         try {
             setIsSubmittingIssue(true);
@@ -332,17 +345,19 @@ export default function OrderDetailPage() {
                     body: JSON.stringify({
                         orderId: order.id,
                         itemIndex: issueItemIndex,
+                        bundleItemIndex: issueBundleItemIndex,
                         issueStatus,
                         issueReason: reason
                     })
                 }),
                 handleSendIssueReport({
-                    itemName: issueItem.productName,
+                    itemName: issueBundleItemIndex === null ? issueItem.productName : issueTarget.productName,
                     issueStatus,
                     issueReason: reason
                 })
             ]);
             setIssueItemIndex(null);
+            setIssueBundleItemIndex(null);
             setIssueStatus('returned');
             setIssueReason("");
             setIssueError("");
@@ -672,7 +687,10 @@ export default function OrderDetailPage() {
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Loader2 className="animate-spin text-slate-400" /></div>;
     if (!order) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-400">ไม่พบคำสั่งซื้อ</div>;
 
-    const issueItem = issueItemIndex !== null ? order.items[issueItemIndex] : null;
+    const issueParentItem = issueItemIndex !== null ? order.items[issueItemIndex] : null;
+    const issueItem = issueBundleItemIndex !== null
+        ? issueParentItem?.bundleItems?.[issueBundleItemIndex] || null
+        : issueParentItem;
 
     return (
         <div className="min-h-screen bg-slate-100 text-slate-900 font-sans pb-20">
@@ -844,7 +862,7 @@ export default function OrderDetailPage() {
                                                     </button>
                                                     {isExpanded && (
                                                     <div className="space-y-1 px-2 py-2">
-                                                    {item.bundleItems.map((bundleItem) => {
+                                                    {item.bundleItems.map((bundleItem, bundleIndex) => {
                                                         const bundleStatus = getItemStatusInfo(bundleItem.status || item.status || fallbackItemStatus);
 
                                                         return (
@@ -853,11 +871,22 @@ export default function OrderDetailPage() {
                                                                 <p className="min-w-0 flex-1 leading-4 text-slate-600">
                                                                     {bundleItem.productName}{bundleItem.variantName ? ` (${bundleItem.variantName})` : ""} x{bundleItem.quantity}
                                                                 </p>
-                                                                {bundleStatus && (
-                                                                    <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${bundleStatus.bg} ${bundleStatus.color} ${bundleStatus.border}`}>
-                                                                        {bundleStatus.label}
-                                                                    </span>
-                                                                )}
+                                                                <div className="flex shrink-0 items-center gap-1">
+                                                                    {bundleStatus && (
+                                                                        <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${bundleStatus.bg} ${bundleStatus.color} ${bundleStatus.border}`}>
+                                                                            {bundleStatus.label}
+                                                                        </span>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => openIssueModal(idx, bundleIndex)}
+                                                                        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${bundleItem.issueReason ? "border-orange-200 bg-orange-50 text-orange-600" : "border-slate-200 bg-white text-slate-400 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"}`}
+                                                                        aria-label={`แจ้งปัญหา ${bundleItem.productName}`}
+                                                                        title="แจ้งปัญหา"
+                                                                    >
+                                                                        <CircleAlert size={11} />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                             {bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0 && (
                                                                 <div className="ml-2 space-y-0.5">
@@ -870,6 +899,12 @@ export default function OrderDetailPage() {
                                                             )}
                                                             {bundleStatus && (bundleItem.status || item.status || fallbackItemStatus) === "ready" && bundleItem.pickupLabel && (
                                                                 <PickupInfo label={bundleItem.pickupLabel} detail={bundleItem.pickupDetail || ""} compact />
+                                                            )}
+                                                            {(bundleItem.issueReason || bundleItem.issueAdminReply) && (
+                                                                <div className="mt-1 rounded-md border border-orange-100 bg-orange-50 px-2 py-1 text-[10px] leading-4 text-orange-700">
+                                                                    {bundleItem.issueReason && <div><span className="font-semibold">แจ้ง:</span> {bundleItem.issueReason}</div>}
+                                                                    {bundleItem.issueAdminReply && <div className="mt-0.5 border-t border-orange-100 pt-0.5 text-orange-800"><span className="font-semibold">ตอบ:</span> {bundleItem.issueAdminReply}</div>}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     )})}
