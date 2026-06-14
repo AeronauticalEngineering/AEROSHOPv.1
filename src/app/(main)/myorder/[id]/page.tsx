@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, addDoc, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Package, Clock, CheckCircle, Truck, XCircle, MapPin, CreditCard, Copy, Check, Loader2, RotateCcw, CircleAlert, UploadCloud } from "lucide-react";
+import { Package, Clock, CheckCircle, Truck, XCircle, MapPin, CreditCard, Copy, Check, Loader2, RotateCcw, CircleAlert, UploadCloud, ShoppingBag } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { StoreSettings } from "@/types/store";
@@ -696,20 +697,28 @@ export default function OrderDetailPage() {
         <div className="min-h-screen bg-slate-100 text-slate-900 font-sans pb-20">
             <main className="max-w-3xl mx-auto p-4 space-y-4">
                 {/* Status Card */}
-                <div className="bg-white rounded-2xl border border-slate-200  p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex min-w-0 items-center gap-3">
-                            <div className={`p-2 rounded-full ${statusInfo?.bg || 'bg-slate-100'} ${statusInfo?.color}`}>
-                                {statusInfo?.icon}
-                            </div>
-                            <div className="min-w-0">
-                                <h2 className="font-semibold text-base text-slate-900">รายละเอียดคำสั่งซื้อ</h2>
-                                <p className="text-[11px] text-slate-500 mt-0.5 font-mono">{formatOrderId(order, 12)}</p>
-                                <p className="text-[11px] text-slate-400 mt-0.5">{format(order.createdAt, 'd MMM yyyy, HH:mm', { locale: th })}</p>
+                <div className="bg-white rounded-2xl border border-slate-200 p-3.5">
+                    <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-4 max-[520px]:flex-col">
+                            <Link
+                                href="/"
+                                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-900 bg-white px-4 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50 max-[520px]:w-full"
+                            >
+                                <ShoppingBag size={15} />
+                                กลับไปหน้าหลัก
+                            </Link>
+
+                            <div className="min-w-0 text-right max-[520px]:w-full max-[520px]:text-left">
+                                <h2 className="text-lg font-semibold leading-6 text-slate-900 max-[520px]:text-base">รายละเอียดคำสั่งซื้อ</h2>
+                                <p className="mt-0.5 text-xs leading-4 text-slate-400">{format(order.createdAt, 'd MMM yyyy, HH:mm', { locale: th })}</p>
                             </div>
                         </div>
-                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                            <span className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold ${statusInfo?.border || "border-slate-200"} ${statusInfo?.bg || "bg-slate-50"} ${statusInfo?.color || "text-slate-700"}`}>
+
+                        <div className={`grid gap-2.5 ${canCancelOrder ? "grid-cols-3" : "grid-cols-2"} max-[520px]:grid-cols-1`}>
+                            <span className="inline-flex min-h-9 items-center justify-center rounded-full bg-slate-200 px-4 py-1.5 text-xs font-medium text-slate-900">
+                                {formatOrderId(order, 12)}
+                            </span>
+                            <span className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold ${statusInfo?.border || "border-slate-200"} ${statusInfo?.bg || "bg-slate-50"} ${statusInfo?.color || "text-slate-700"}`}>
                                 {statusInfo?.icon}
                                 {statusInfo?.label}
                             </span>
@@ -717,9 +726,10 @@ export default function OrderDetailPage() {
                                 <button
                                     onClick={() => setIsCancelModalOpen(true)}
                                     disabled={canceling}
-                                    className="inline-flex min-h-8 items-center justify-center rounded-full border border-red-200 bg-white px-3 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full border border-red-500 bg-white px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                                 >
-                                    {canceling ? "กำลังยกเลิก..." : "ยกเลิกออเดอร์"}
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    {canceling ? "กำลังยกเลิก..." : "ยกเลิก"}
                                 </button>
                             )}
                         </div>
@@ -1297,7 +1307,7 @@ export default function OrderDetailPage() {
                                         setIssueError("");
                                     }}
                                     rows={4}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
                                     placeholder="เช่น สินค้าชำรุด ได้รับไม่ครบ ต้องการคืนสินค้า"
                                 />
                             </div>
@@ -1378,7 +1388,7 @@ export default function OrderDetailPage() {
                                     value={cancelReason}
                                     onChange={(e) => setCancelReason(e.target.value)}
                                     rows={3}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
                                     placeholder="ระบุเหตุผลการยกเลิก"
                                 />
                             </div>
@@ -1392,7 +1402,7 @@ export default function OrderDetailPage() {
                                             setCancelError("");
                                         }}
                                         rows={3}
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
                                         placeholder="เช่น พร้อมเพย์ 0812345678 / ธนาคาร กสิกร 123-4-56789-0 ชื่อบัญชี..."
                                     />
                                     <p className="text-[11px] text-slate-500">ใช้สำหรับคืนเงินหลังยกเลิกออเดอร์ที่ชำระแล้ว</p>
