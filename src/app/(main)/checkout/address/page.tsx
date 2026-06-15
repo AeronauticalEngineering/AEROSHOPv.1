@@ -312,7 +312,7 @@ export default function CheckoutAddressPage() {
                                 name="name"
                                 value={formData.name}
                                 onChange={handleChange}
-                                placeholder="เช่น นายสมชาย ใจดี"
+                                placeholder="เช่น น้องแอโร่ รักการบิน"
                                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-300 transition-all"
                             />
                         </div>
