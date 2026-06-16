@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { collection, query, orderBy, onSnapshot, where, Timestamp } from "firebase/firestore";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
-    TrendingUp, TrendingDown, ShoppingBag, Users, Package,
-    CreditCard, Clock, Truck, CheckCircle, XCircle,
+    TrendingUp, ShoppingBag, Users, Package,
+    CreditCard, Clock, Truck, CheckCircle, XCircle, RotateCcw,
     AlertTriangle, ArrowUpRight, ArrowDownRight, Loader2
 } from "lucide-react";
 import { format, subDays, startOfDay, endOfDay, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
@@ -40,12 +40,67 @@ interface Customer {
     lastOrderAt: Date | null;
 }
 
+type DateRange = 'today' | 'week' | 'month' | 'custom';
+
+const formatDateInput = (date: Date) => format(date, "yyyy-MM-dd");
+
+const getDateRange = (dateRange: DateRange, customStartDate: string, customEndDate: string) => {
+    const now = new Date();
+    if (dateRange === "custom") {
+        if (!customStartDate || !customEndDate) {
+            return { start: startOfDay(now), end: endOfDay(now) };
+        }
+        const firstDate = customStartDate <= customEndDate ? customStartDate : customEndDate;
+        const lastDate = customStartDate <= customEndDate ? customEndDate : customStartDate;
+        return {
+            start: startOfDay(new Date(`${firstDate}T00:00:00`)),
+            end: endOfDay(new Date(`${lastDate}T00:00:00`))
+        };
+    }
+
+    switch (dateRange) {
+        case 'today':
+            return { start: startOfDay(now), end: endOfDay(now) };
+        case 'week':
+            return { start: startOfDay(subDays(now, 7)), end: endOfDay(now) };
+        case 'month':
+            return { start: startOfMonth(now), end: endOfMonth(now) };
+    }
+};
+
+const StatCard = ({ title, value, change, icon, prefix = "", suffix = "", changeLabel = "" }: {
+    title: string;
+    value: string | number;
+    change?: number;
+    icon: ReactNode;
+    prefix?: string;
+    suffix?: string;
+    changeLabel?: string;
+}) => (
+    <div className="bg-white p-4 rounded-xl border border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-gray-500">{title}</span>
+            <div className="p-2 bg-gray-50 rounded-lg text-gray-500">{icon}</div>
+        </div>
+        <p className="text-2xl font-bold text-gray-900">{prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}</p>
+        {change !== undefined && (
+            <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {change >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                <span>{Math.abs(change).toFixed(1)}%</span>
+                <span className="text-gray-400">{changeLabel || 'จากช่วงก่อน'}</span>
+            </div>
+        )}
+    </div>
+);
+
 export default function AdminDashboard() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
+    const [dateRange, setDateRange] = useState<DateRange>('today');
+    const [customStartDate, setCustomStartDate] = useState(() => formatDateInput(new Date()));
+    const [customEndDate, setCustomEndDate] = useState(() => formatDateInput(new Date()));
 
     // Fetch all data
     useEffect(() => {
@@ -92,37 +147,36 @@ export default function AdminDashboard() {
         };
     }, []);
 
-    // Date range filter
-    const getDateRange = () => {
-        const now = new Date();
-        switch (dateRange) {
-            case 'today':
-                return { start: startOfDay(now), end: endOfDay(now) };
-            case 'week':
-                return { start: startOfDay(subDays(now, 7)), end: endOfDay(now) };
-            case 'month':
-                return { start: startOfMonth(now), end: endOfMonth(now) };
-        }
+    const selectedDateRange = useMemo(
+        () => getDateRange(dateRange, customStartDate, customEndDate),
+        [dateRange, customStartDate, customEndDate]
+    );
+
+    const handlePresetRange = (range: Exclude<DateRange, "custom">) => {
+        const nextRange = getDateRange(range, customStartDate, customEndDate);
+        setDateRange(range);
+        setCustomStartDate(formatDateInput(nextRange.start));
+        setCustomEndDate(formatDateInput(nextRange.end));
     };
 
     // Filtered orders by date range
     const filteredOrders = useMemo(() => {
-        const { start, end } = getDateRange();
+        const { start, end } = selectedDateRange;
         return orders.filter(order =>
             isWithinInterval(order.createdAt, { start, end })
         );
-    }, [orders, dateRange]);
+    }, [orders, selectedDateRange]);
 
     // Previous period orders for comparison
     const previousOrders = useMemo(() => {
-        const { start, end } = getDateRange();
+        const { start, end } = selectedDateRange;
         const duration = end.getTime() - start.getTime();
         const prevStart = new Date(start.getTime() - duration);
         const prevEnd = new Date(end.getTime() - duration);
         return orders.filter(order =>
             isWithinInterval(order.createdAt, { start: prevStart, end: prevEnd })
         );
-    }, [orders, dateRange]);
+    }, [orders, selectedDateRange]);
 
     // Analytics calculations
     const stats = useMemo(() => {
@@ -164,7 +218,7 @@ export default function AdminDashboard() {
         // Customers
         const totalCustomers = customers.length;
         const newCustomers = customers.filter(c => {
-            const { start, end } = getDateRange();
+            const { start, end } = selectedDateRange;
             return c.lastOrderAt && isWithinInterval(c.lastOrderAt, { start, end });
         }).length;
 
@@ -217,7 +271,7 @@ export default function AdminDashboard() {
             conversionRate,
             cancellationRate
         };
-    }, [filteredOrders, previousOrders, products, customers, dateRange]);
+    }, [filteredOrders, previousOrders, products, customers, selectedDateRange]);
 
     // Recent orders
     const recentOrders = orders.slice(0, 5);
@@ -230,31 +284,6 @@ export default function AdminDashboard() {
         );
     }
 
-    const StatCard = ({ title, value, change, icon, prefix = "", suffix = "", changeLabel = "" }: {
-        title: string;
-        value: string | number;
-        change?: number;
-        icon: React.ReactNode;
-        prefix?: string;
-        suffix?: string;
-        changeLabel?: string;
-    }) => (
-        <div className="bg-white p-4 rounded-xl border border-gray-100">
-            <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-gray-500">{title}</span>
-                <div className="p-2 bg-gray-50 rounded-lg text-gray-500">{icon}</div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}</p>
-            {change !== undefined && (
-                <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {change >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span>{Math.abs(change).toFixed(1)}%</span>
-                    <span className="text-gray-400">{changeLabel || 'จากช่วงก่อน'}</span>
-                </div>
-            )}
-        </div>
-    );
-
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             {/* Header */}
@@ -263,17 +292,47 @@ export default function AdminDashboard() {
                     <h1 className="text-xl font-bold text-gray-900">ภาพรวม</h1>
                     <p className="text-sm text-gray-500">วิเคราะห์ข้อมูลร้านค้า</p>
                 </div>
-                <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-                    {(['today', 'week', 'month'] as const).map(range => (
-                        <button
-                            key={range}
-                            onClick={() => setDateRange(range)}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${dateRange === range ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                        >
-                            {range === 'today' ? 'วันนี้' : range === 'week' ? '7 วัน' : 'เดือนนี้'}
-                        </button>
-                    ))}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                        {(['today', 'week', 'month'] as const).map(range => (
+                            <button
+                                key={range}
+                                onClick={() => handlePresetRange(range)}
+                                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${dateRange === range ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                            >
+                                {range === 'today' ? 'วันนี้' : range === 'week' ? '7 วัน' : 'เดือนนี้'}
+                            </button>
+                        ))}
+                    </div>
+                    <div className={`flex flex-wrap items-center gap-2 rounded-lg border p-1.5 ${dateRange === "custom" ? "border-gray-300 bg-white shadow-sm" : "border-gray-100 bg-white/70"}`}>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-gray-500">
+                            จากวันที่
+                            <input
+                                type="date"
+                                value={customStartDate}
+                                max={customEndDate}
+                                onChange={(event) => {
+                                    setCustomStartDate(event.target.value);
+                                    setDateRange("custom");
+                                }}
+                                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-800 outline-none focus:border-gray-400"
+                            />
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-gray-500">
+                            ถึงวันที่
+                            <input
+                                type="date"
+                                value={customEndDate}
+                                min={customStartDate}
+                                onChange={(event) => {
+                                    setCustomEndDate(event.target.value);
+                                    setDateRange("custom");
+                                }}
+                                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-800 outline-none focus:border-gray-400"
+                            />
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -312,8 +371,8 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Order Status Breakdown */}
                 <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-4">
-                    <h3 className="font-semibold text-sm text-gray-900 mb-4">สถานะคำสั่งซื้อ</h3>
-                    <div className="grid grid-cols-5 gap-3">
+                    <h3 className="font-semibold text-sm text-gray-900 mb-4">สถานะคำสั่งซื้อในช่วงที่เลือก</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
                         <div className="text-center p-3 bg-amber-50 rounded-lg">
                             <Clock size={20} className="mx-auto text-amber-600 mb-1" />
                             <p className="text-lg font-bold text-amber-700">{stats.statusBreakdown.pending}</p>
@@ -338,6 +397,11 @@ export default function AdminDashboard() {
                             <XCircle size={20} className="mx-auto text-red-600 mb-1" />
                             <p className="text-lg font-bold text-red-700">{stats.statusBreakdown.cancelled}</p>
                             <p className="text-xs text-red-600">ยกเลิก</p>
+                        </div>
+                        <div className="text-center p-3 bg-orange-50 rounded-lg">
+                            <RotateCcw size={20} className="mx-auto text-orange-600 mb-1" />
+                            <p className="text-lg font-bold text-orange-700">{stats.statusBreakdown.returned}</p>
+                            <p className="text-xs text-orange-600">คืนสินค้า</p>
                         </div>
                     </div>
                 </div>

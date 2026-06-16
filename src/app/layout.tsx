@@ -8,8 +8,8 @@ import { PromotionProvider } from "@/context/PromotionContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Eshop LineOA",
-  description: "ร้านค้าออนไลน์ผ่าน Line OA",
+  title: "Aeroshop",
+  description: "สินค้าจาก แอโร่ช็อป",
 };
 
 export const viewport: Viewport = {
