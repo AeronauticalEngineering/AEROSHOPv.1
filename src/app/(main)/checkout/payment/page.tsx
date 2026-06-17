@@ -392,12 +392,13 @@ export default function CheckoutPaymentPage() {
             setSlipVerifyMessage("ไฟล์ใหญ่เกินไป กรุณาแนบสลิปใหม่");
             return;
         }
+        const shouldAutoVerifySlip = Boolean(storeSettings?.enableSlipVerify);
         setSlipFile(file);
         setSlipPreview(URL.createObjectURL(file));
-        setSlipVerifyStatus("idle");
-        setSlipVerifyMessage(storeSettings?.enableSlipVerify ? "กำลังตรวจสอบสลิปอัตโนมัติ..." : "");
+        setSlipVerifyStatus(shouldAutoVerifySlip ? "checking" : "idle");
+        setSlipVerifyMessage(shouldAutoVerifySlip ? "กำลังตรวจสอบสลิปอัตโนมัติ..." : "");
 
-        if (!storeSettings?.enableSlipVerify) return;
+        if (!shouldAutoVerifySlip) return;
 
         try {
             const result = await uploadSelectedSlip(null, file);
