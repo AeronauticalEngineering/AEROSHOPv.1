@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -392,30 +392,11 @@ export default function CheckoutPaymentPage() {
             setSlipVerifyMessage("ไฟล์ใหญ่เกินไป กรุณาแนบสลิปใหม่");
             return;
         }
-        const shouldAutoVerifySlip = Boolean(storeSettings?.enableSlipVerify);
+        // เก็บไฟล์ไว้ในเครื่องก่อน จะสร้าง slip doc + verify หลังสร้างออเดอร์
         setSlipFile(file);
         setSlipPreview(URL.createObjectURL(file));
-        setSlipVerifyStatus(shouldAutoVerifySlip ? "checking" : "idle");
-        setSlipVerifyMessage(shouldAutoVerifySlip ? "กำลังตรวจสอบสลิปอัตโนมัติ..." : "");
-
-        if (!shouldAutoVerifySlip) return;
-
-        try {
-            const result = await uploadSelectedSlip(null, file);
-            setUploadedSlipId(result?.slipId || null);
-            if (result?.verified) {
-                setVerifiedSlipId(result.slipId);
-            } else {
-                setVerifiedSlipId(null);
-                setSlipError("");
-            }
-        } catch (error) {
-            console.error("Slip verify on attach failed:", error);
-            setVerifiedSlipId(null);
-            setSlipVerifyStatus("failed");
-            setSlipVerifyMessage("ตรวจสอบสลิปไม่สำเร็จ จะสร้างออเดอร์เป็นรอตรวจสอบ");
-            setSlipError("");
-        }
+        setSlipVerifyStatus("idle");
+        setSlipVerifyMessage("");
     };
     const promptPayQrUrl = getPromptPayQrUrl();
     const uploadSelectedSlip = async (orderId: string | null, fileOverride?: File): Promise<SlipVerifyResult | null> => {
@@ -601,15 +582,6 @@ export default function CheckoutPaymentPage() {
             const isSlipPayment = selectedPaymentMethod === "promptpay" || selectedPaymentMethod === "bank_transfer";
             let slipVerifyResult: SlipVerifyResult | null = null;
 
-            if (isSlipPayment && verifiedSlipId && slipVerifyStatus === "verified") {
-                slipVerifyResult = {
-                    verified: true,
-                    status: "verified",
-                    message: slipVerifyMessage || "ชำระเงินสำเร็จ ตรวจสอบสลิปผ่านแล้ว",
-                    slipId: verifiedSlipId
-                };
-            }
-
             const customerId = userProfile?.lineId || userProfile?.uid || userProfile?.id || 'guest';
 
             const baseOrderData = {
@@ -647,10 +619,10 @@ export default function CheckoutPaymentPage() {
                 shippingOptionId: selectedShippingOption?.id || null,
                 shippingOptionName: selectedShippingOption?.name || null,
                 totalAmount: grandTotal, // Net total
-                status: slipVerifyResult?.verified ? 'paid' : 'pending',
+                status: 'pending',
                 paymentMethod: selectedPaymentMethod || 'pay_later',
-                paymentStatus: slipVerifyResult?.verified ? 'verified' : isSlipPayment ? 'pending' : null,
-                paymentVerifiedAt: slipVerifyResult?.verified ? serverTimestamp() : null,
+                paymentStatus: isSlipPayment ? 'pending' : null,
+                paymentVerifiedAt: null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             };
@@ -685,14 +657,8 @@ export default function CheckoutPaymentPage() {
                 }
             }
 
-            const existingSlipId = slipVerifyResult?.slipId || uploadedSlipId;
-            if (existingSlipId) {
-                await updateDoc(doc(db, "payment_slips", existingSlipId), {
-                    orderId,
-                    userId: userProfile?.uid || userProfile?.id || null,
-                    updatedAt: serverTimestamp()
-                });
-            } else if (isSlipPayment && slipFile) {
+            // สร้าง slip doc หลังมี orderId แล้ว → ทุก slip จะมี orderId เสมอ
+            if (isSlipPayment && slipFile) {
                 slipVerifyResult = await uploadSelectedSlip(orderId);
             }
 

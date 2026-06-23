@@ -42,6 +42,8 @@ export default function ProductDetailPage() {
     const [addOnValues, setAddOnValues] = useState<Record<string, string>>({});
     const [bundleSelectedAddOnIds, setBundleSelectedAddOnIds] = useState<Record<string, string[]>>({});
     const [bundleAddOnValues, setBundleAddOnValues] = useState<Record<string, Record<string, string>>>({});
+    const [bundleOptionSelections, setBundleOptionSelections] = useState<Record<string, Record<string, string>>>({});
+    const [bundleCustomOptionValues, setBundleCustomOptionValues] = useState<Record<string, Record<string, string>>>({});
     const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
     const [guidePreviewImage, setGuidePreviewImage] = useState<{ src: string; alt: string } | null>(null);
 
@@ -66,6 +68,8 @@ export default function ProductDetailPage() {
                     setBundleVariantSelections({});
                     setBundleSelectedAddOnIds({});
                     setBundleAddOnValues({});
+                    setBundleOptionSelections({});
+                    setBundleCustomOptionValues({});
                     setActiveImageIndex(0);
 
                     if (productData.guideId) {
@@ -188,8 +192,36 @@ export default function ProductDetailPage() {
         if (!product?.bundleItems?.length) return [];
         return product.bundleItems.map(item => {
             const childProduct = bundleProducts[item.productId];
-            const selectedVariantId = item.variantId || bundleVariantSelections[item.id] || "";
-            const selectedVariant = childProduct?.variants?.find(variant => variant.id === selectedVariantId);
+            const itemOptions = bundleOptionSelections[item.id] || {};
+            const itemCustomValues = bundleCustomOptionValues[item.id] || {};
+            const hasCustom = Object.values(itemOptions).includes("__custom__");
+
+            let selectedVariant = null;
+            let customVariantName = "";
+
+            if (item.variantId) {
+                // Pre-selected variant from admin
+                selectedVariant = childProduct?.variants?.find(v => v.id === item.variantId);
+            } else if (hasCustom) {
+                // Custom option selected — build custom variant name
+                const allFilled = (childProduct?.options || []).every(opt => {
+                    const val = itemOptions[opt.name];
+                    if (!val) return false;
+                    if (val === "__custom__") return Boolean(itemCustomValues[opt.name]?.trim());
+                    return true;
+                });
+                if (allFilled) {
+                    customVariantName = (childProduct?.options || []).map(opt => {
+                        const val = itemOptions[opt.name];
+                        return val === "__custom__" ? itemCustomValues[opt.name]?.trim() : val;
+                    }).filter(Boolean).join(" / ");
+                }
+            } else {
+                // Normal variant selection via dropdown or buttons
+                const selectedVariantId = bundleVariantSelections[item.id] || "";
+                selectedVariant = childProduct?.variants?.find(v => v.id === selectedVariantId);
+            }
+
             const selectedBundleAddOns = (childProduct?.addOns || [])
                 .filter(addOn => addOn.isActive !== false && (bundleSelectedAddOnIds[item.id] || []).includes(addOn.id))
                 .map(addOn => ({
@@ -200,16 +232,28 @@ export default function ProductDetailPage() {
                 }));
             return {
                 ...item,
-                variantId: selectedVariant?.id || item.variantId || "",
-                variantName: selectedVariant?.name || item.variantName || "",
+                variantId: selectedVariant?.id || (customVariantName ? `custom-${item.id}` : item.variantId || ""),
+                variantName: selectedVariant?.name || customVariantName || item.variantName || "",
                 unitPrice: selectedVariant?.price ?? item.unitPrice,
                 selectedAddOns: selectedBundleAddOns
             };
         });
-    }, [bundleAddOnValues, bundleProducts, bundleSelectedAddOnIds, bundleVariantSelections, product]);
+    }, [bundleAddOnValues, bundleCustomOptionValues, bundleOptionSelections, bundleProducts, bundleSelectedAddOnIds, bundleVariantSelections, product]);
     const bundleSelectionMissing = Boolean(isBundleProduct && product?.bundleItems?.some(item => {
         const childProduct = bundleProducts[item.productId];
-        return childProduct?.hasVariants && !item.variantId && !bundleVariantSelections[item.id];
+        if (!childProduct?.hasVariants || item.variantId) return false;
+        const itemOptions = bundleOptionSelections[item.id] || {};
+        const itemCustomValues = bundleCustomOptionValues[item.id] || {};
+        const hasCustom = Object.values(itemOptions).includes("__custom__");
+        if (childProduct.options && childProduct.options.length > 0) {
+            return childProduct.options.some(opt => {
+                const val = itemOptions[opt.name];
+                if (!val) return true; // Option not selected
+                if (val === "__custom__") return !itemCustomValues[opt.name]?.trim(); // Custom option empty
+                return false;
+            });
+        }
+        return !bundleVariantSelections[item.id];
     }));
     const bundleAvailableStock = useMemo(() => {
         if (!isBundleProduct || !product?.bundleItems?.length || bundleSelectionMissing) return product?.stock || 0;
@@ -405,6 +449,48 @@ export default function ProductDetailPage() {
             [bundleItemId]: {
                 ...(prev[bundleItemId] || {}),
                 [addOnId]: value
+            }
+        }));
+    };
+
+    const handleBundleOptionSelect = (bundleItemId: string, optionName: string, value: string) => {
+        setBundleOptionSelections(prev => ({
+            ...prev,
+            [bundleItemId]: {
+                ...(prev[bundleItemId] || {}),
+                [optionName]: value
+            }
+        }));
+        // When selecting a non-custom option, try to find and set the matching variant
+        const itemOptions = { ...(bundleOptionSelections[bundleItemId] || {}), [optionName]: value };
+        const item = product?.bundleItems?.find(i => i.id === bundleItemId);
+        const childProduct = item ? bundleProducts[item.productId] : undefined;
+
+        if (childProduct?.variants && childProduct.options) {
+            const allOptionsSelected = childProduct.options.every(opt => itemOptions[opt.name]);
+            if (allOptionsSelected && !Object.values(itemOptions).includes("__custom__")) {
+                const matchedVariant = childProduct.variants.find(v =>
+                    v.attributes && Object.entries(itemOptions).every(([k, val]) =>
+                        v.attributes[k] === val
+                    )
+                );
+                if (matchedVariant) {
+                    handleBundleVariantSelect(bundleItemId, matchedVariant.id);
+                } else {
+                    handleBundleVariantSelect(bundleItemId, "");
+                }
+            } else {
+                handleBundleVariantSelect(bundleItemId, "");
+            }
+        }
+    };
+
+    const handleBundleCustomOptionChange = (bundleItemId: string, optionName: string, value: string) => {
+        setBundleCustomOptionValues(prev => ({
+            ...prev,
+            [bundleItemId]: {
+                ...(prev[bundleItemId] || {}),
+                [optionName]: value
             }
         }));
     };
@@ -627,8 +713,8 @@ export default function ProductDetailPage() {
                                             type="text"
                                             value={customOptionValues[option.name] || ""}
                                             onChange={(event) => handleCustomOptionChange(option.name, event.target.value)}
-                                            placeholder={`โปรดระบุข้อมูลเพิมเติม`}
-                                            className="mt-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
+                                            placeholder={`โปรดระบุข้อมูลเพิ่มเติม`}
+                                            className="mt-3 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-gray-900 focus:ring-4 focus:ring-gray-900/10 transition-all"
                                         />
                                     )}
                                 </div>
@@ -699,7 +785,7 @@ export default function ProductDetailPage() {
                                                     maxLength={maxLength}
                                                     onChange={(event) => handleAddOnValueChange(addOn.id, event.target.value)}
                                                     placeholder={addOn.placeholder || "กรอกรายละเอียด"}
-                                                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
+                                                    className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-gray-900 focus:ring-4 focus:ring-gray-900/10 transition-all"
                                                 />
                                                 {maxLength && (
                                                     <p className="mt-1 text-right text-[11px] text-gray-400">
@@ -736,22 +822,87 @@ export default function ProductDetailPage() {
                                             </span>
                                         </div>
                                         {childProduct?.hasVariants && !item.variantId && (
-                                            <div className="mt-3">
-                                                <label className="mb-1 block text-xs font-semibold text-gray-500">
-                                                    เลือกตัวเลือก
-                                                </label>
-                                                <select
-                                                    value={selectedVariantId}
-                                                    onChange={(event) => handleBundleVariantSelect(item.id, event.target.value)}
-                                                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100"
-                                                >
-                                                    <option value="">เลือกตัวเลือก</option>
-                                                    {(childProduct.variants || []).map((variant) => (
-                                                        <option key={variant.id} value={variant.id}>
-                                                            {variant.name} · เหลือ {variant.stock} ชิ้น
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                            <div className="mt-3 space-y-3">
+                                                {(childProduct.options || []).map(option => {
+                                                    const itemOptionValue = (bundleOptionSelections[item.id] || {})[option.name] || "";
+                                                    return (
+                                                        <div key={option.id}>
+                                                            <label className="mb-1 block text-xs font-semibold text-gray-500">
+                                                                {option.name}
+                                                                {itemOptionValue && (
+                                                                    <span className="ml-1.5 text-gray-400 font-normal">
+                                                                        : {itemOptionValue === "__custom__"
+                                                                            ? (bundleCustomOptionValues[item.id]?.[option.name]?.trim() || "กำหนดเอง")
+                                                                            : itemOptionValue}
+                                                                    </span>
+                                                                )}
+                                                            </label>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {option.values.map(value => {
+                                                                    const isSelected = itemOptionValue === value;
+                                                                    return (
+                                                                        <button
+                                                                            key={value}
+                                                                            type="button"
+                                                                            onClick={() => handleBundleOptionSelect(item.id, option.name, value)}
+                                                                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                                isSelected
+                                                                                    ? 'bg-gray-900 text-white shadow-md'
+                                                                                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                                                                            }`}
+                                                                        >
+                                                                            {isSelected && <Check size={12} className="inline mr-1 -mt-0.5" />}
+                                                                            {value}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                                {option.allowCustom && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleBundleOptionSelect(item.id, option.name, "__custom__")}
+                                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                            itemOptionValue === "__custom__"
+                                                                                ? 'bg-gray-900 text-white shadow-md'
+                                                                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                                                                        }`}
+                                                                    >
+                                                                        {itemOptionValue === "__custom__" && <Check size={12} className="inline mr-1 -mt-0.5" />}
+                                                                        กำหนดเอง
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            {option.allowCustom && itemOptionValue === "__custom__" && (
+                                                                <input
+                                                                    type="text"
+                                                                    value={bundleCustomOptionValues[item.id]?.[option.name] || ""}
+                                                                    onChange={(event) => handleBundleCustomOptionChange(item.id, option.name, event.target.value)}
+                                                                    placeholder="โปรดระบุข้อมูลเพิ่มเติม"
+                                                                    className="mt-2.5 w-full rounded-xl border-2 border-gray-200 bg-white px-3 py-2.5 text-xs text-gray-900 placeholder:text-gray-400 outline-none focus:border-gray-900 focus:ring-4 focus:ring-gray-900/10 transition-all"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                                {/* Fallback: show dropdown if no options defined but has variants */}
+                                                {(!childProduct.options || childProduct.options.length === 0) && (
+                                                    <div>
+                                                        <label className="mb-1 block text-xs font-semibold text-gray-500">
+                                                            เลือกตัวเลือก
+                                                        </label>
+                                                        <select
+                                                            value={selectedVariantId}
+                                                            onChange={(event) => handleBundleVariantSelect(item.id, event.target.value)}
+                                                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100"
+                                                        >
+                                                            <option value="">เลือกตัวเลือก</option>
+                                                            {(childProduct.variants || []).map((variant) => (
+                                                                <option key={variant.id} value={variant.id}>
+                                                                    {variant.name} · เหลือ {variant.stock} ชิ้น
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                         {childProduct?.addOns && childProduct.addOns.filter(addOn => addOn.isActive !== false).length > 0 && (

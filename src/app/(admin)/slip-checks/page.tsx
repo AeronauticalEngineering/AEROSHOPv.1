@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { collection, limit, onSnapshot, orderBy, query, updateDoc, deleteDoc, doc } from "firebase/firestore";
@@ -239,8 +239,8 @@ export default function SlipChecksPage() {
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">ผลตรวจสลิป</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-lg font-bold text-gray-900">ผลตรวจสลิป</h1>
+          <p className="text-xs text-gray-500">
             {filtered.length} รายการ
             {slips.length !== filtered.length ? ` (จากทั้งหมด ${slips.length})` : ""}
           </p>
@@ -255,7 +255,7 @@ export default function SlipChecksPage() {
                 setCurrentPage(1);
               }}
               placeholder="ค้นหา Order ID"
-              className="pl-7 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
+              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
             />
           </div>
           <select
@@ -264,7 +264,7 @@ export default function SlipChecksPage() {
               setFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none"
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none"
           >
             <option value="all">ทั้งหมด</option>
             <option value="pending">รอตรวจสอบ</option>
@@ -283,15 +283,15 @@ export default function SlipChecksPage() {
           <div className="p-8 text-center text-gray-400">ไม่พบรายการ</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500">
+            <table className="min-w-[900px] w-full text-xs">
+              <thead className="bg-gray-50 text-[11px] text-gray-500">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">สถานะ</th>
-                  <th className="px-4 py-3 text-left font-semibold">ออเดอร์</th>
-                  <th className="px-4 py-3 text-right font-semibold">ยอด / ตรวจพบ</th>
-                  <th className="px-4 py-3 text-left font-semibold">เวลา</th>
-                  <th className="px-4 py-3 text-left font-semibold">ผล</th>
-                  <th className="px-4 py-3 text-right font-semibold">จัดการ</th>
+                  <th className="px-3 py-2 text-left font-semibold">สถานะ</th>
+                  <th className="px-3 py-2 text-left font-semibold">ออเดอร์</th>
+                  <th className="px-3 py-2 text-right font-semibold">ยอด / ตรวจพบ</th>
+                  <th className="px-3 py-2 text-left font-semibold">เวลา</th>
+                  <th className="px-3 py-2 text-left font-semibold">ผล</th>
+                  <th className="px-3 py-2 text-right font-semibold">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -300,36 +300,36 @@ export default function SlipChecksPage() {
                   return (
                     <Fragment key={slip.id}>
                       <tr className="hover:bg-gray-50/50">
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${status.color}`}>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${status.color}`}>
                             {status.icon}
                             {status.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="text-sm font-medium text-gray-900">{slip.orderId || "-"}</div>
+                        <td className="px-3 py-2">
+                          <div className="text-xs font-medium text-gray-900">{slip.orderId || "-"}</div>
                           {slip.orderId && (
-                            <Link href={`/orders/${encodeURIComponent(slip.orderId)}`} className="text-xs text-blue-600 hover:underline">
+                            <Link href={`/orders/${encodeURIComponent(slip.orderId)}`} className="text-[10px] text-blue-600 hover:underline">
                               ดูออเดอร์
                             </Link>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-xs text-gray-500">
+                        <td className="px-3 py-2 text-right text-[11px] text-gray-500">
                           ฿{Number(slip.amount || 0).toLocaleString()}
-                          <div className="text-[11px] text-gray-400">
+                          <div className="text-[10px] text-gray-400">
                             ตรวจพบ: {slip.verifiedAmount != null ? `฿${Number(slip.verifiedAmount).toLocaleString()}` : "-"}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-400">
+                        <td className="px-3 py-2 text-[10px] text-gray-400 leading-relaxed">
                           ส่งเมื่อ: {formatDate(slip.createdAt)}
                           <div>ตรวจเมื่อ: {formatDate(slip.verifiedAt)}</div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">
+                        <td className="px-3 py-2 text-[11px] text-gray-600 max-w-[180px] truncate">
                           {slip.verifyMessage || "-"}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <div className="flex bg-gray-50 rounded-lg p-1 gap-1">
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <div className="flex bg-gray-50 rounded-md p-0.5 gap-0.5">
                               <button
                                 onClick={() => openManualVerifyConfirm({
                                   slip,
@@ -339,7 +339,7 @@ export default function SlipChecksPage() {
                                   description: "ต้องการยืนยันสลิปนี้ว่าตรวจสอบผ่านใช่หรือไม่?",
                                   tone: "green"
                                 })}
-                                className="px-2 py-1 text-xs font-semibold text-green-700 hover:bg-white rounded shadow-sm hover:shadow transition-all"
+                                className="px-1.5 py-0.5 text-[10px] font-semibold text-green-700 hover:bg-white rounded shadow-sm hover:shadow transition-all"
                                 title="อนุมัติเอง"
                               >
                                 อนุมัติ
@@ -353,7 +353,7 @@ export default function SlipChecksPage() {
                                   description: "ต้องการเปลี่ยนสลิปนี้เป็นไม่ผ่านใช่หรือไม่?",
                                   tone: "red"
                                 })}
-                                className="px-2 py-1 text-xs font-semibold text-red-700 hover:bg-white rounded shadow-sm hover:shadow transition-all"
+                                className="px-1.5 py-0.5 text-[10px] font-semibold text-red-700 hover:bg-white rounded shadow-sm hover:shadow transition-all"
                                 title="ไม่อนุมัติ"
                               >
                                 ไม่ผ่าน
@@ -363,26 +363,26 @@ export default function SlipChecksPage() {
                               <button
                                 onClick={() => requestVerify(slip)}
                                 disabled={(!slip.base64 && !slip.imageUrl) || verifyingId === slip.id}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50"
                                 title="ให้ระบบช่วยตรวจสอบ"
                               >
-                                <CheckCircle size={14} />
+                                <CheckCircle size={12} />
                                 Auto
                               </button>
                             )}
                             <button
                               onClick={() => setImagePreviewTarget(slip)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg hover:bg-gray-50"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-gray-200 rounded-md hover:bg-gray-50"
                             >
-                              <ImageIcon size={14} />
+                              <ImageIcon size={12} />
                               รูป
                             </button>
                             <button
                               onClick={() => openDeleteConfirm(slip)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border border-gray-200 text-red-600 rounded-lg hover:bg-white hover:border-red-200 hover:bg-red-50"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-gray-200 text-red-600 rounded-md hover:bg-white hover:border-red-200 hover:bg-red-50"
                               title="ลบรายการ"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         </td>

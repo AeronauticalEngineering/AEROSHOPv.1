@@ -472,15 +472,8 @@ export default function OrderDetailPage() {
                 } : prev);
             }
 
-            // Persist to Firestore
-            if (newStatus !== 'error') {
-                const slipRef = doc(db, "payment_slips", id);
-                await updateDoc(slipRef, {
-                    verifyStatus: newStatus,
-                    verifyMessage: newMessage,
-                    lastCheckedAt: serverTimestamp()
-                });
-            }
+            // à¹„à¸¡à¹ˆà¸•à¹‰à¸­à¸‡ update Firestore à¸—à¸µà¹ˆà¸™à¸µà¹ˆ à¹€à¸žà¸£à¸²à¸° API /api/slipok/verify à¸­à¸±à¸›à¹€à¸”à¸•à¹„à¸›à¹à¸¥à¹‰à¸§
+            // à¹à¸¥à¸° onSnapshot listener à¸ˆà¸° sync à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸à¸¥à¸±à¸šà¸¡à¸²à¹€à¸­à¸‡à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´
 
         } catch (err) {
             console.error("Verification error:", err);
