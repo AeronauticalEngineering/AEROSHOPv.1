@@ -370,10 +370,10 @@ export default function PromotionsPage() {
                         type="button"
                         onClick={() => updatePromotionSetting("couponsEnabled", !promotionSettings.couponsEnabled)}
                         disabled={savingSettingKey === "couponsEnabled"}
-                        className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-60 ${promotionSettings.couponsEnabled ? "bg-gray-900" : "bg-gray-200"}`}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${promotionSettings.couponsEnabled ? "bg-gray-900" : "bg-gray-200"}`}
                         aria-label="เปิดปิดคูปอง"
                     >
-                        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${promotionSettings.couponsEnabled ? "translate-x-5" : "translate-x-1"}`} />
+                        <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${promotionSettings.couponsEnabled ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-4">
@@ -392,10 +392,10 @@ export default function PromotionsPage() {
                         type="button"
                         onClick={() => updatePromotionSetting("autoPromotionsEnabled", !promotionSettings.autoPromotionsEnabled)}
                         disabled={savingSettingKey === "autoPromotionsEnabled"}
-                        className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-60 ${promotionSettings.autoPromotionsEnabled ? "bg-gray-900" : "bg-gray-200"}`}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${promotionSettings.autoPromotionsEnabled ? "bg-gray-900" : "bg-gray-200"}`}
                         aria-label="เปิดปิดโปรโมชั่นอัตโนมัติ"
                     >
-                        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${promotionSettings.autoPromotionsEnabled ? "translate-x-5" : "translate-x-1"}`} />
+                        <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${promotionSettings.autoPromotionsEnabled ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                 </div>
             </div>

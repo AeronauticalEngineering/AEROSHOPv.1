@@ -260,12 +260,17 @@ export default function ProductDetailPage() {
         return Math.min(...product.bundleItems.map(item => {
             const childProduct = bundleProducts[item.productId];
             if (!childProduct) return 0;
+            
+            const itemOptions = bundleOptionSelections[item.id] || {};
+            const hasCustom = Object.values(itemOptions).includes("__custom__");
+            if (hasCustom) return 9999; // ข้ามการเช็คสต๊อกถ้าเป็นตัวเลือกกำหนดเอง
+            
             const selectedVariantId = item.variantId || bundleVariantSelections[item.id] || "";
             const selectedVariant = childProduct.variants?.find(variant => variant.id === selectedVariantId);
             const stock = childProduct.hasVariants ? selectedVariant?.stock || 0 : childProduct.stock || 0;
             return Math.floor(stock / Math.max(1, Number(item.quantity) || 1));
         }));
-    }, [bundleProducts, bundleSelectionMissing, bundleVariantSelections, isBundleProduct, product]);
+    }, [bundleProducts, bundleSelectionMissing, bundleVariantSelections, bundleOptionSelections, isBundleProduct, product]);
     const hasCustomSelection = Object.values(selectedOptions).includes("__custom__");
     const customSelectionComplete = !product?.options?.some(
         option => selectedOptions[option.name] === "__custom__" && !customOptionValues[option.name]?.trim()
@@ -284,7 +289,7 @@ export default function ProductDetailPage() {
             id: `custom-${encodeURIComponent(JSON.stringify(attributes))}`,
             name: Object.values(attributes).join(" / "),
             price: product.price,
-            stock: product.stock,
+            stock: 9999, // ข้ามการเช็คสต๊อกถ้าเป็นตัวเลือกกำหนดเอง
             attributes
         };
     }, [customOptionValues, customSelectionComplete, hasCustomSelection, product, selectedOptions]);

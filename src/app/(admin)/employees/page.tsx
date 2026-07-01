@@ -158,31 +158,29 @@ export default function AdminEmployeesPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">จัดการพนักงาน</h1>
                     <p className="text-sm text-gray-500 mt-1">รายชื่อพนักงานและผู้ดูแลระบบทั้งหมด</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:bg-blue-700 transition-all hover:shadow-md"
-                >
-                    <Plus size={18} />
-                    เพิ่มพนักงาน
-                </button>
-            </div>
-
-            {/* Search */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-                <div className="relative max-w-md">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input
-                        type="text"
-                        placeholder="ค้นหาชื่อ, อีเมล..."
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                        value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                    />
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <input
+                            type="text"
+                            placeholder="ค้นหาชื่อ, อีเมล..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                        />
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:bg-blue-700 transition-all hover:shadow-md w-full sm:w-auto shrink-0"
+                    >
+                        <Plus size={18} />
+                        เพิ่มพนักงาน
+                    </button>
                 </div>
             </div>
 

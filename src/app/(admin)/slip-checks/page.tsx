@@ -47,6 +47,29 @@ function isTimestampLike(value: unknown): value is { toDate: () => Date } {
   return typeof candidate.toDate === "function";
 }
 
+function OrderCancelledBadge({ orderId }: { orderId: string }) {
+  const [isCancelled, setIsCancelled] = useState(false);
+  useEffect(() => {
+    if (!orderId) return;
+    const unsub = onSnapshot(doc(db, "orders", orderId), (snap) => {
+      if (snap.exists() && snap.data().status === "cancelled") {
+        setIsCancelled(true);
+      } else {
+        setIsCancelled(false);
+      }
+    });
+    return () => unsub();
+  }, [orderId]);
+
+  if (!isCancelled) return null;
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-red-100 text-red-700">
+      <XCircle size={10} />
+      ออเดอร์ยกเลิก
+    </span>
+  );
+}
+
 export default function SlipChecksPage() {
   const [slips, setSlips] = useState<SlipCheck[]>([]);
   const [isSlipVerifyEnabled, setIsSlipVerifyEnabled] = useState(false);
@@ -284,7 +307,7 @@ export default function SlipChecksPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full text-xs">
-              <thead className="bg-gray-50 text-[11px] text-gray-500">
+              <thead className="bg-gray-100 text-[11px] text-gray-600">
                 <tr>
                   <th className="px-3 py-2 text-left font-semibold">สถานะ</th>
                   <th className="px-3 py-2 text-left font-semibold">ออเดอร์</th>
@@ -301,10 +324,15 @@ export default function SlipChecksPage() {
                     <Fragment key={slip.id}>
                       <tr className="hover:bg-gray-50/50">
                         <td className="px-3 py-2">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${status.color}`}>
-                            {status.icon}
-                            {status.label}
-                          </span>
+                          <div className="flex flex-col items-start gap-1.5">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${status.color}`}>
+                              {status.icon}
+                              {status.label}
+                            </span>
+                            {slip.orderId && (
+                              <OrderCancelledBadge orderId={slip.orderId} />
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2">
                           <div className="text-xs font-medium text-gray-900">{slip.orderId || "-"}</div>

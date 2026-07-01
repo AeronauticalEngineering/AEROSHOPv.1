@@ -609,6 +609,7 @@ export default function CheckoutPaymentPage() {
                         discountValue: item.appliedPromo.discountValue
                     } : null,
                     imageUrl: item.imageUrl,
+                    variantId: item.selectedVariant ? item.selectedVariant.id : null,
                     variantInfo: item.selectedVariant ? item.selectedVariant.name : null,
                     addOns: item.selectedAddOns || [],
                     bundleItems: item.bundleItems || []
