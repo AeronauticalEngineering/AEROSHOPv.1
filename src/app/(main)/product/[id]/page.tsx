@@ -29,6 +29,15 @@ export default function ProductDetailPage() {
     const [productBase64Images, setProductBase64Images] = useState<string[]>([]);
     const [productGuide, setProductGuide] = useState<ProductGuide | null>(null);
     const [bundleProducts, setBundleProducts] = useState<Record<string, Product>>({});
+    const [bundleGuides, setBundleGuides] = useState<Record<string, ProductGuide>>({});
+    const [activeModalGuide, setActiveModalGuide] = useState<{
+        title: string;
+        text: string;
+        imageBase64: string;
+        imageUrl: string;
+        imageName: string;
+        productName: string;
+    } | null>(null);
     const [bundleVariantSelections, setBundleVariantSelections] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [qty, setQty] = useState(1);
@@ -44,7 +53,6 @@ export default function ProductDetailPage() {
     const [bundleAddOnValues, setBundleAddOnValues] = useState<Record<string, Record<string, string>>>({});
     const [bundleOptionSelections, setBundleOptionSelections] = useState<Record<string, Record<string, string>>>({});
     const [bundleCustomOptionValues, setBundleCustomOptionValues] = useState<Record<string, Record<string, string>>>({});
-    const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
     const [guidePreviewImage, setGuidePreviewImage] = useState<{ src: string; alt: string } | null>(null);
 
     useEffect(() => {
@@ -65,6 +73,8 @@ export default function ProductDetailPage() {
                     setProductBase64Images(await fetchProductBase64Images(productData));
                     setProductGuide(null);
                     setBundleProducts({});
+                    setBundleGuides({});
+                    setActiveModalGuide(null);
                     setBundleVariantSelections({});
                     setBundleSelectedAddOnIds({});
                     setBundleAddOnValues({});
@@ -109,9 +119,28 @@ export default function ProductDetailPage() {
                                 return childSnap.exists() ? ({ id: childSnap.id, ...childSnap.data() } as Product) : null;
                             })
                         );
-                        setBundleProducts(Object.fromEntries(
+                        const fetchedBundleProducts = Object.fromEntries(
                             childSnaps.filter(Boolean).map(child => [child!.id, child!])
+                        );
+                        setBundleProducts(fetchedBundleProducts);
+
+                        const guideIds = Array.from(new Set(
+                            Object.values(fetchedBundleProducts)
+                                .map(p => p.guideId)
+                                .filter(Boolean)
                         ));
+                        
+                        if (guideIds.length > 0) {
+                            const guideSnaps = await Promise.all(
+                                guideIds.map(async (gId) => {
+                                    const gSnap = await getDoc(doc(db, "product_guides", gId as string));
+                                    return gSnap.exists() ? ({ id: gSnap.id, ...gSnap.data() } as ProductGuide) : null;
+                                })
+                            );
+                            setBundleGuides(Object.fromEntries(
+                                guideSnaps.filter(Boolean).map(g => [g!.id, g!])
+                            ));
+                        }
                     }
                 }
 
@@ -403,6 +432,27 @@ export default function ProductDetailPage() {
     const effectiveGuideImageSrc = effectiveGuide?.imageBase64 || formatImageUrl(effectiveGuide?.imageUrl);
     const hasProductGuide = Boolean(effectiveGuide?.text?.trim() || effectiveGuideImageSrc);
 
+    const getBundleItemGuide = (childProduct: Product) => {
+        if (childProduct.guideId && bundleGuides[childProduct.guideId]) {
+            const guide = bundleGuides[childProduct.guideId];
+            return {
+                title: guide.title,
+                text: guide.text || "",
+                imageBase64: guide.imageBase64 || "",
+                imageUrl: guide.imageUrl || "",
+                imageName: guide.imageName || ""
+            };
+        }
+        if (!childProduct.guideText?.trim() && !childProduct.guideImageBase64) return null;
+        return {
+            title: childProduct.guideTitle || "คำแนะนำสินค้า",
+            text: childProduct.guideText || "",
+            imageBase64: childProduct.guideImageBase64 || "",
+            imageUrl: "",
+            imageName: childProduct.guideImageName || ""
+        };
+    };
+
     const handleOptionSelect = (optionName: string, value: string) => {
         setSelectedOptions(prev => ({
             ...prev,
@@ -622,7 +672,11 @@ export default function ProductDetailPage() {
                         {hasProductGuide && (
                             <button
                                 type="button"
-                                onClick={() => setIsGuideModalOpen(true)}
+                                onClick={() => {
+                                    if (effectiveGuide) {
+                                        setActiveModalGuide({ ...effectiveGuide, productName: product.name });
+                                    }
+                                }}
                                 className="mt-1 inline-flex max-w-[150px] shrink-0 items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-700 shadow-sm hover:bg-sky-100"
                                 aria-label="ดูคำแนะนำสินค้า"
                             >
@@ -822,9 +876,31 @@ export default function ProductDetailPage() {
                                                     <p className="mt-0.5 text-xs text-gray-500">{item.variantName}</p>
                                                 )}
                                             </div>
-                                            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-bold text-gray-700">
-                                                x {qty.toLocaleString()}
-                                            </span>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {(() => {
+                                                    const childGuide = childProduct ? getBundleItemGuide(childProduct) : null;
+                                                    if (!childGuide) return null;
+                                                    const childGuideImageSrc = childGuide.imageBase64 || formatImageUrl(childGuide.imageUrl);
+                                                    const hasChildGuide = Boolean(childGuide.text?.trim() || childGuideImageSrc);
+                                                    if (!hasChildGuide) return null;
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setActiveModalGuide({ ...childGuide, productName: item.productName });
+                                                            }}
+                                                            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 shadow-sm hover:bg-sky-100"
+                                                            aria-label="ดูคำแนะนำสินค้า"
+                                                        >
+                                                            {childGuideImageSrc ? <ImageIcon size={10} /> : <AlertTriangle size={10} />}
+                                                            <span className="truncate">{childGuide.title || "คำแนะนำ"}</span>
+                                                        </button>
+                                                    );
+                                                })()}
+                                                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-gray-700">
+                                                    x {qty.toLocaleString()}
+                                                </span>
+                                            </div>
                                         </div>
                                         {childProduct?.hasVariants && !item.variantId && (
                                             <div className="mt-3 space-y-3">
@@ -977,40 +1053,40 @@ export default function ProductDetailPage() {
                 </div>
             </main>
 
-            {isGuideModalOpen && hasProductGuide && (
+            {activeModalGuide && (
                 <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
                     <div className="w-full rounded-t-2xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl">
                         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                             <div>
-                                <h3 className="text-sm font-bold text-gray-900">{effectiveGuide?.title || "คำแนะนำสินค้า"}</h3>
-                                <p className="mt-0.5 text-[11px] text-gray-400">{product.name}</p>
+                                <h3 className="text-sm font-bold text-gray-900">{activeModalGuide.title || "คำแนะนำสินค้า"}</h3>
+                                <p className="mt-0.5 text-[11px] text-gray-400">{activeModalGuide.productName}</p>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setIsGuideModalOpen(false)}
+                                onClick={() => setActiveModalGuide(null)}
                                 className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                             >
                                 <XCircle size={22} />
                             </button>
                         </div>
                         <div className="max-h-[72vh] overflow-y-auto bg-slate-50 p-4">
-                            {effectiveGuideImageSrc && (
+                            {(activeModalGuide.imageBase64 || formatImageUrl(activeModalGuide.imageUrl)) && (
                                 <button
                                     type="button"
                                     onClick={() => setGuidePreviewImage({
-                                        src: effectiveGuideImageSrc,
-                                        alt: effectiveGuide?.imageName || effectiveGuide?.title || product.name
+                                        src: activeModalGuide.imageBase64 || formatImageUrl(activeModalGuide.imageUrl),
+                                        alt: activeModalGuide.imageName || activeModalGuide.title || activeModalGuide.productName
                                     })}
                                     className="mb-3 block w-full overflow-hidden rounded-xl border border-slate-200 bg-white"
                                 >
-                                    <img src={effectiveGuideImageSrc} alt={effectiveGuide?.imageName || "รูปคำแนะนำสินค้า"} className="max-h-80 w-full object-contain" />
+                                    <img src={activeModalGuide.imageBase64 || formatImageUrl(activeModalGuide.imageUrl)} alt={activeModalGuide.imageName || "รูปคำแนะนำสินค้า"} className="max-h-80 w-full object-contain" />
                                 </button>
                             )}
-                            {effectiveGuide?.text?.trim() && (
+                            {activeModalGuide.text?.trim() && (
                                 <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-sky-950">
                                     <div className="flex items-start gap-2">
                                         <AlertTriangle size={16} className="mt-0.5 shrink-0 text-sky-600" />
-                                        <p className="whitespace-pre-line text-xs leading-6 text-sky-800">{effectiveGuide.text}</p>
+                                        <p className="whitespace-pre-line text-xs leading-6 text-sky-800">{activeModalGuide.text}</p>
                                     </div>
                                 </div>
                             )}

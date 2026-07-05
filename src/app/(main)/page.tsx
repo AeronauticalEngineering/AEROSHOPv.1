@@ -578,7 +578,7 @@ export default function ShopHome() {
                                                     <img
                                                         src={primaryImage}
                                                         alt={product.name}
-                                                        className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                                                        className="w-full h-full object-contain transition-transform group-hover:scale-105 rounded-lg"
                                                     />
                                                 ) : (
                                                     <Package size={32} className="text-gray-200" />
@@ -606,23 +606,25 @@ export default function ShopHome() {
                                             </div>
                                             {/* Info */}
                                             <div className="p-3">
-                                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{product.category}</span>
-                                                <h3 className="font-semibold text-sm text-gray-900 mt-0.5 line-clamp-1">{product.name}</h3>
+                                                <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{product.name}</h3>
 
                                                 <div className="flex items-end justify-between mt-2">
                                                     <div className="flex flex-row items-baseline gap-1">
                                                         {hasDiscount ? (
                                                             <>
-                                                                <span className="text-xs text-gray-400 line-through">฿{product.price.toLocaleString()}</span>
-                                                                <span className="font-bold text-red-600 text-base">฿{finalPrice.toLocaleString()}</span>
+                                                                <span className="text-xs text-gray-400 line-through leading-none">฿{product.price.toLocaleString()}</span>
+                                                                <span className="font-bold text-red-600 text-base leading-none">฿{finalPrice.toLocaleString()}</span>
                                                             </>
                                                         ) : (
-                                                            <span className="font-bold text-gray-900 text-base">฿{product.price.toLocaleString()}</span>
+                                                            <span className="font-bold text-gray-900 text-base leading-none">฿{product.price.toLocaleString()}</span>
                                                         )}
                                                     </div>
-                                                    {product.hasVariants && product.variants && product.variants.length > 0 && (
-                                                        <span className="text-[10px] text-gray-400 mb-1">{product.variants.length} แบบ</span>
-                                                    )}
+                                                    <div className="flex flex-col items-end justify-end gap-1">
+                                                        {product.hasVariants && product.variants && product.variants.length > 0 && (
+                                                            <span className="text-[10px] text-gray-400 leading-none">{product.variants.length} แบบ</span>
+                                                        )}
+                                                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide leading-none">{product.category}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

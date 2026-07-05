@@ -70,26 +70,30 @@ function CheckoutSummaryContent() {
 function CheckoutPreOrderSummary() {
     const router = useRouter();
     const { cartItems, totalAmount } = useCart();
-    const [addressData] = useState<CheckoutAddress | null>(() => {
-        if (typeof window === "undefined") return null;
-        const saved = sessionStorage.getItem("checkout_address");
-        return saved ? JSON.parse(saved) : null;
-    });
+    const [addressData, setAddressData] = useState<CheckoutAddress | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const saved = sessionStorage.getItem("checkout_address");
+            setAddressData(saved ? JSON.parse(saved) : null);
+        }
+    }, []);
     const [promotions, setPromotions] = useState<Promotion[]>([]);
     const [promotionSettings, setPromotionSettings] = useState<PromotionSettings>({
         couponsEnabled: true,
         autoPromotionsEnabled: true
     });
-    const [rawAppliedCoupon] = useState(() => {
-        if (typeof window === "undefined") return "";
-        return sessionStorage.getItem("applied_coupon") || "";
-    });
+    const [rawAppliedCoupon, setRawAppliedCoupon] = useState("");
     const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
     const [isSubmitting] = useState(false);
-    const [selectedShippingOptionId] = useState(() => {
-        if (typeof window === "undefined") return "";
-        return sessionStorage.getItem("selected_shipping_option") || "";
-    });
+    const [selectedShippingOptionId, setSelectedShippingOptionId] = useState("");
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            setRawAppliedCoupon(sessionStorage.getItem("applied_coupon") || "");
+            setSelectedShippingOptionId(sessionStorage.getItem("selected_shipping_option") || "");
+        }
+    }, []);
 
     useEffect(() => {
         const fetchInitialData = async () => {
