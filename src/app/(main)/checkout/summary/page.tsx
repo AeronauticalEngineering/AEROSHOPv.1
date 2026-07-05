@@ -273,7 +273,7 @@ function CheckoutPreOrderSummary() {
         const directOptions = activeShippingOptions.filter(option => !option.conditionType || option.conditionType === "standard" || option.conditionType === "location");
         const locationOptions = directOptions.filter(option => option.conditionType === "location");
 
-        if (locationOptions.length > 0) {
+        if (directOptions.length > 0) {
             return automaticShippingOption ? [...directOptions, automaticShippingOption] : directOptions;
         }
         if (!storeSettings) return [];

@@ -345,7 +345,7 @@ export default function CartPage() {
         const directOptions = activeShippingOptions.filter(option => !option.conditionType || option.conditionType === "standard" || option.conditionType === "location");
         const locationOptions = directOptions.filter(option => option.conditionType === "location");
 
-        if (locationOptions.length > 0) {
+        if (directOptions.length > 0) {
             return automaticShippingOption ? [...directOptions, automaticShippingOption] : directOptions;
         }
         if (!storeSettings) return [];
@@ -366,13 +366,13 @@ export default function CartPage() {
     const selectedShippingOption = selectedOption || (hasLocationShippingOptions ? selectableShippingOptions[0] : automaticShippingOption || selectableShippingOptions[0]) || null;
 
     useEffect(() => {
-        if (typeof window === "undefined") return;
+        if (typeof window === "undefined" || !storeSettings) return;
         if (selectedShippingOptionId && !selectableShippingOptions.some(option => option.id === selectedShippingOptionId)) {
             setSelectedShippingOptionId("");
             sessionStorage.removeItem("selected_shipping_option");
             sessionStorage.removeItem("selected_shipping_location");
         }
-    }, [selectableShippingOptions, selectedShippingOptionId]);
+    }, [selectableShippingOptions, selectedShippingOptionId, storeSettings]);
 
     useEffect(() => {
         if (typeof window === "undefined" || selectedShippingOptionId || !hasLocationShippingOptions) return;
