@@ -96,10 +96,17 @@ const formatItemAddOns = (item: Order["items"][number]) => {
     if (itemAddOns) parts.push(itemAddOns);
 
     (item.bundleItems || []).forEach((bundleItem) => {
+        let text = bundleItem.productName || "Bundle item";
+        if (bundleItem.variantName) {
+            text += ` (${bundleItem.variantName})`;
+        }
+        text += ` x${bundleItem.quantity || 1}`;
+        
         const bundleAddOns = formatAddOns(bundleItem.selectedAddOns);
         if (bundleAddOns) {
-            parts.push(`${bundleItem.productName || "Bundle item"}: ${bundleAddOns}`);
+            text += ` + [${bundleAddOns}]`;
         }
+        parts.push(text);
     });
 
     return parts.join(" || ");
@@ -378,6 +385,7 @@ export default function AdminReportsPage() {
                                             <td className="px-4 py-3">
                                                 <p className="font-semibold text-gray-900">{row.productName}</p>
                                                 {row.variantInfo && <p className="mt-0.5 text-xs text-gray-400">{row.variantInfo}</p>}
+                                                {row.addOns && <p className="mt-0.5 text-[11px] text-gray-500">{row.addOns}</p>}
                                             </td>
                                             <td className="px-4 py-3 text-right font-semibold text-gray-900">{row.quantity.toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right text-gray-600">{row.orderCount.toLocaleString()}</td>
