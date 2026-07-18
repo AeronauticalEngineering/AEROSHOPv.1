@@ -5,13 +5,15 @@ import { collection, onSnapshot, orderBy, query, Timestamp } from "firebase/fire
 import { db } from "@/lib/firebase";
 import { Order, OrderStatus } from "@/types/order";
 import { formatOrderId } from "@/lib/orderId";
-import { BarChart3, CalendarDays, Download, Package, ReceiptText, ShoppingBag, TrendingUp } from "lucide-react";
+import { BarChart3, CalendarDays, Download, Package, ReceiptText, ShoppingBag, TrendingUp, X } from "lucide-react";
 
 type ReportOrder = Order & {
     paymentMethod?: string;
     paymentStatus?: string;
     subTotal?: number;
     totalDiscount?: number;
+    paidAt?: Date | null;
+    paymentVerifiedAt?: Date | null;
 };
 
 type ProductReportRow = {
@@ -122,12 +124,55 @@ const formatOrderAddOns = (order: Order) => {
         .join(" || ");
 };
 
+const ORDER_COLUMNS = [
+    { key: "id", label: "เลขคำสั่งซื้อ (Order ID)", getValue: (order: ReportOrder) => formatOrderId(order, 12) },
+    { key: "createdAt", label: "วันที่สั่งซื้อ (Date)", getValue: (order: ReportOrder) => toDate(order.createdAt).toLocaleString("th-TH") },
+    { key: "customerName", label: "ชื่อลูกค้า (Customer)", getValue: (order: ReportOrder) => order.customerName || "" },
+    { key: "customerPhone", label: "เบอร์โทรศัพท์ (Phone)", getValue: (order: ReportOrder) => order.customerPhone || "" },
+    { key: "status", label: "สถานะคำสั่งซื้อ (Status)", getValue: (order: ReportOrder) => order.status },
+    { key: "paymentMethod", label: "ช่องทางการชำระเงิน (Payment Method)", getValue: (order: ReportOrder) => order.paymentMethod || "" },
+    { key: "paymentStatus", label: "สถานะชำระเงิน (Payment Status)", getValue: (order: ReportOrder) => order.paymentStatus || "" },
+    { 
+        key: "paymentDetail", 
+        label: "รายละเอียดการชำระเงิน (Payment Detail)", 
+        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+            if (order.paymentDetail) return order.paymentDetail;
+            const slip = slipsMap?.get(order.id);
+            if (slip?.verifyMessage) return slip.verifyMessage;
+            if (order.paymentStatus === "verified") return "ตรวจสอบผ่าน SlipOK";
+            return "";
+        } 
+    },
+    { 
+        key: "paidAt", 
+        label: "เวลาชำระเงิน (Payment Time)", 
+        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+            const rawPaidAt = order.paidAt || order.paymentVerifiedAt;
+            if (rawPaidAt) return toDate(rawPaidAt).toLocaleString("th-TH");
+            const slip = slipsMap?.get(order.id);
+            if (slip?.verifiedAt) return toDate(slip.verifiedAt).toLocaleString("th-TH");
+            if (slip?.createdAt) return toDate(slip.createdAt).toLocaleString("th-TH");
+            return "";
+        } 
+    },
+    { key: "slipUrl", label: "ลิงก์รูปสลิป (Slip URL)", getValue: (order: ReportOrder) => order.slipUrl || "" },
+    { key: "itemsCount", label: "จำนวนรายการสินค้า (Items)", getValue: (order: ReportOrder) => (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0) },
+    { key: "addOns", label: "รายละเอียดสินค้าและท็อปปิ้ง (Add-ons)", getValue: (order: ReportOrder) => formatOrderAddOns(order) },
+    { key: "subTotal", label: "ยอดเงินรวมสินค้า (Subtotal)", getValue: (order: ReportOrder) => Number(order.subTotal || 0) },
+    { key: "totalDiscount", label: "ส่วนลดรวม (Discount)", getValue: (order: ReportOrder) => Number(order.totalDiscount || 0) },
+    { key: "deliveryFee", label: "ค่าจัดส่ง (Delivery)", getValue: (order: ReportOrder) => Number(order.deliveryFee || 0) },
+    { key: "totalAmount", label: "ยอดรวมสุทธิ (Total)", getValue: (order: ReportOrder) => Number(order.totalAmount || 0) },
+];
+
 export default function AdminReportsPage() {
     const [orders, setOrders] = useState<ReportOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(toDateInputValue(getStartOfMonth()));
     const [endDate, setEndDate] = useState(toDateInputValue(new Date()));
     const [statusFilter, setStatusFilter] = useState<"revenue" | "all" | OrderStatus>("revenue");
+    const [selectedColumns, setSelectedColumns] = useState<string[]>(ORDER_COLUMNS.map(c => c.key));
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [slips, setSlips] = useState<any[]>([]);
 
     useEffect(() => {
         const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -138,7 +183,9 @@ export default function AdminReportsPage() {
                     id: docSnap.id,
                     ...data,
                     createdAt: toDate(data.createdAt),
-                    updatedAt: toDate(data.updatedAt)
+                    updatedAt: toDate(data.updatedAt),
+                    paidAt: data.paidAt ? toDate(data.paidAt) : null,
+                    paymentVerifiedAt: data.paymentVerifiedAt ? toDate(data.paymentVerifiedAt) : null
                 } as ReportOrder;
             });
             setOrders(items);
@@ -146,6 +193,30 @@ export default function AdminReportsPage() {
         });
         return () => unsubscribe();
     }, []);
+
+    useEffect(() => {
+        const q = query(collection(db, "payment_slips"), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const items = snapshot.docs.map((docSnap) => ({
+                id: docSnap.id,
+                ...docSnap.data()
+            }));
+            setSlips(items);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const slipsMap = useMemo(() => {
+        const map = new Map<string, any>();
+        slips.forEach(slip => {
+            if (slip.orderId) {
+                if (!map.has(slip.orderId) || slip.verifyStatus === "verified") {
+                    map.set(slip.orderId, slip);
+                }
+            }
+        });
+        return map;
+    }, [slips]);
 
     const filteredOrders = useMemo(() => {
         const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
@@ -212,23 +283,17 @@ export default function AdminReportsPage() {
     }, [filteredOrders]);
 
     const exportOrdersCsv = () => {
+        const activeColumns = ORDER_COLUMNS.filter(c => selectedColumns.includes(c.key));
+        if (activeColumns.length === 0) {
+            alert("กรุณาเลือกอย่างน้อย 1 คอลัมน์");
+            return;
+        }
+
         downloadCsv(`sales-orders-${startDate}-to-${endDate}.csv`, [
-            ["Order ID", "Date", "Customer", "Phone", "Status", "Payment Method", "Items", "Add-ons", "Subtotal", "Discount", "Delivery", "Total"],
-            ...filteredOrders.map((order) => [
-                formatOrderId(order, 12),
-                toDate(order.createdAt).toLocaleString("th-TH"),
-                order.customerName || "",
-                order.customerPhone || "",
-                order.status,
-                order.paymentMethod || "",
-                (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-                formatOrderAddOns(order),
-                Number(order.subTotal || 0),
-                Number(order.totalDiscount || 0),
-                Number(order.deliveryFee || 0),
-                Number(order.totalAmount || 0)
-            ])
+            activeColumns.map(c => c.label),
+            ...filteredOrders.map((order) => activeColumns.map(c => c.getValue(order, slipsMap)))
         ]);
+        setIsExportModalOpen(false);
     };
 
     const exportProductsCsv = () => {
@@ -255,7 +320,7 @@ export default function AdminReportsPage() {
                 <div className="flex flex-wrap gap-2">
                     <button
                         type="button"
-                        onClick={exportOrdersCsv}
+                        onClick={() => setIsExportModalOpen(true)}
                         disabled={filteredOrders.length === 0}
                         className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
@@ -369,9 +434,9 @@ export default function AdminReportsPage() {
                             <thead className="bg-gray-50 text-xs text-gray-500">
                                 <tr>
                                     <th className="px-4 py-3 text-left font-semibold">สินค้า</th>
-                                    <th className="px-4 py-3 text-right font-semibold">จำนวนขาย</th>
-                                    <th className="px-4 py-3 text-right font-semibold">ออเดอร์</th>
-                                    <th className="px-4 py-3 text-right font-semibold">ยอดขาย</th>
+                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">จำนวนขาย</th>
+                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">ออเดอร์</th>
+                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">ยอดขาย</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -410,14 +475,14 @@ export default function AdminReportsPage() {
                             <div className="px-4 py-8 text-center text-sm text-gray-400">ไม่พบคำสั่งซื้อ</div>
                         ) : (
                             filteredOrders.slice(0, 12).map((order) => (
-                                <div key={order.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                                <div key={order.id} className="flex items-start justify-between gap-3 px-4 py-2">
                                     <div className="min-w-0">
-                                        <p className="font-semibold text-gray-900">{formatOrderId(order, 12)}</p>
-                                        <p className="mt-0.5 truncate text-xs text-gray-500">{order.customerName || "-"} · {toDate(order.createdAt).toLocaleString("th-TH")}</p>
+                                        <p className="text-sm font-semibold text-gray-900">{formatOrderId(order, 12)}</p>
+                                        <p className="mt-0.5 truncate text-[11px] text-gray-500">{order.customerName || "-"} · {toDate(order.createdAt).toLocaleString("th-TH")}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-gray-900">{formatMoney(Number(order.totalAmount || 0))}</p>
-                                        <p className="mt-0.5 text-xs text-gray-400">{order.status}</p>
+                                        <p className="text-sm font-bold text-gray-900">{formatMoney(Number(order.totalAmount || 0))}</p>
+                                        <p className="mt-0.5 text-[11px] text-gray-400">{order.status}</p>
                                     </div>
                                 </div>
                             ))
@@ -425,6 +490,95 @@ export default function AdminReportsPage() {
                     </div>
                 </section>
             </div>
+
+            {isExportModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white w-full max-w-lg md:max-w-3xl rounded-2xl border border-gray-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                        {/* Header */}
+                        <div className="flex justify-between items-center px-5 py-3.5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-base font-bold text-gray-900">เลือกคอลัมน์สำหรับการ Export</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">เลือกคอลัมน์ข้อมูลคำสั่งซื้อที่ต้องการนำออกเป็นไฟล์ CSV</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsExportModalOpen(false)}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-5 overflow-y-auto space-y-4">
+                            {/* Actions */}
+                            <div className="flex gap-2 text-xs font-semibold">
+                                <button
+                                    onClick={() => setSelectedColumns(ORDER_COLUMNS.map(c => c.key))}
+                                    className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                >
+                                    เลือกทั้งหมด
+                                </button>
+                                <button
+                                    onClick={() => setSelectedColumns([])}
+                                    className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                >
+                                    ล้างทั้งหมด
+                                </button>
+                            </div>
+
+                            {/* Checkbox grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                                {ORDER_COLUMNS.map((col) => {
+                                    const isChecked = selectedColumns.includes(col.key);
+                                    return (
+                                        <label 
+                                            key={col.key}
+                                            className={`flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer text-xs font-medium transition-all select-none ${
+                                                isChecked 
+                                                    ? 'border-gray-900 bg-gray-50/50 text-gray-900' 
+                                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                    setSelectedColumns(prev => 
+                                                        prev.includes(col.key)
+                                                            ? prev.filter(k => k !== col.key)
+                                                            : [...prev, col.key]
+                                                    );
+                                                }}
+                                                className="w-4 h-4 rounded border-gray-300 text-gray-950 focus:ring-gray-900 accent-black cursor-pointer"
+                                            />
+                                            {col.label}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex gap-2 justify-end px-5 py-3.5 bg-gray-50 border-t border-gray-100">
+                            <button
+                                type="button"
+                                onClick={() => setIsExportModalOpen(false)}
+                                className="px-4 py-2 border border-gray-200 bg-white text-sm font-semibold rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                type="button"
+                                onClick={exportOrdersCsv}
+                                className="px-4 py-2 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors inline-flex items-center gap-2"
+                            >
+                                <Download size={16} />
+                                ดาวน์โหลด CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

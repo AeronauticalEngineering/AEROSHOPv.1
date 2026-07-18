@@ -611,7 +611,7 @@ export default function AdminOrderDetailPage() {
                                                     value={item.productName}
                                                     onChange={(event) => updateItemDraft(index, { productName: event.target.value })}
                                                     disabled={!isEditingItems}
-                                                    className="h-8 min-w-[160px] flex-1 rounded-md border border-gray-200 bg-white px-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
+                                                    className="h-8 min-w-[150px] max-w-[240px] flex-1 rounded-md border border-gray-200 bg-white px-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
                                                     aria-label="ชื่อสินค้า"
                                                 />
                                                 {item.status && (
@@ -702,7 +702,7 @@ export default function AdminOrderDetailPage() {
                                                                     value={bundleItem.productName}
                                                                     onChange={(event) => updateBundleItemDraft(index, bundleIndex, { productName: event.target.value })}
                                                                     disabled={!isEditingItems}
-                                                                    className="h-7 min-w-[130px] flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
+                                                                    className="h-7 min-w-[110px] max-w-[160px] flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
                                                                     aria-label="ชื่อสินค้าในเซต"
                                                                 />
                                                                 {bundleItem.status && (

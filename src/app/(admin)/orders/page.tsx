@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { Order, OrderItemStatus, OrderStatus } from "@/types/order";
 import { PickupOption, StoreSettings } from "@/types/store";
 import { formatOrderId } from "@/lib/orderId";
-import { Search, Eye, Truck, CheckCircle, XCircle, Clock, Package, Trash2, X, ChevronLeft, ChevronRight, ShoppingBag, Loader2, User, MapPin, CreditCard, RotateCcw, CircleAlert, ChevronDown } from "lucide-react";
+import { Search, Eye, Truck, CheckCircle, XCircle, Clock, Package, Trash2, X, ChevronLeft, ChevronRight, ShoppingBag, Loader2, User, MapPin, CreditCard, RotateCcw, CircleAlert, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 
@@ -155,6 +155,32 @@ export default function AdminOrdersPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
     const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+    const [sortBy, setSortBy] = useState<'createdAt' | 'id' | 'customerName' | 'totalAmount' | 'status'>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+    const handleSort = (field: 'createdAt' | 'id' | 'customerName' | 'totalAmount' | 'status') => {
+        if (sortBy === field) {
+            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            if (field === 'createdAt' || field === 'totalAmount') {
+                setSortOrder('desc');
+            } else {
+                setSortOrder('asc');
+            }
+        }
+        setCurrentPage(1);
+    };
+
+    const SortIcon = ({ field }: { field: typeof sortBy }) => {
+        if (sortBy !== field) {
+            return <ArrowUpDown size={12} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0" />;
+        }
+        return sortOrder === 'asc' 
+            ? <ArrowUp size={12} className="text-gray-900 ml-1 flex-shrink-0" />
+            : <ArrowDown size={12} className="text-gray-900 ml-1 flex-shrink-0" />;
+    };
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [statusDraft, setStatusDraft] = useState<OrderStatus | null>(null);
     const [paymentDetailDraft, setPaymentDetailDraft] = useState("");
@@ -591,7 +617,7 @@ export default function AdminOrdersPage() {
     };
 
     const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
+        const filtered = orders.filter(order => {
             const matchSearch =
                 order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -599,7 +625,34 @@ export default function AdminOrdersPage() {
             const matchStatus = filterStatus === 'all' || order.status === filterStatus;
             return matchSearch && matchStatus;
         });
-    }, [orders, searchTerm, filterStatus]);
+
+        return [...filtered].sort((a, b) => {
+            let comparison = 0;
+
+            if (sortBy === 'createdAt') {
+                const getMs = (val: any) => {
+                    if (val instanceof Date) return val.getTime();
+                    if (val && typeof val.toDate === 'function') return val.toDate().getTime();
+                    return 0;
+                };
+                comparison = getMs(a.createdAt) - getMs(b.createdAt);
+            } else if (sortBy === 'id') {
+                comparison = a.id.localeCompare(b.id);
+            } else if (sortBy === 'customerName') {
+                const nameA = a.customerName || '';
+                const nameB = b.customerName || '';
+                comparison = nameA.localeCompare(nameB, 'th');
+            } else if (sortBy === 'totalAmount') {
+                comparison = (a.totalAmount || 0) - (b.totalAmount || 0);
+            } else if (sortBy === 'status') {
+                const labelA = statusConfig[a.status]?.label || '';
+                const labelB = statusConfig[b.status]?.label || '';
+                comparison = labelA.localeCompare(labelB, 'th');
+            }
+
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+    }, [orders, searchTerm, filterStatus, sortBy, sortOrder]);
 
     const stats = useMemo(() => ({
         total: orders.length,
@@ -727,12 +780,37 @@ export default function AdminOrdersPage() {
                 ) : (
                     <>
                         {/* Table Header */}
-                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 border-b">
-                            <div className="col-span-2">เลขที่</div>
-                            <div className="col-span-3">ลูกค้า</div>
-                            <div className="col-span-2">วันที่</div>
-                            <div className="col-span-2 text-right">ยอดรวม</div>
-                            <div className="col-span-1 text-center">สถานะ</div>
+                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 border-b select-none">
+                            <button
+                                onClick={() => handleSort('id')}
+                                className="col-span-2 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                            >
+                                เลขที่ <SortIcon field="id" />
+                            </button>
+                            <button
+                                onClick={() => handleSort('customerName')}
+                                className="col-span-3 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                            >
+                                ลูกค้า <SortIcon field="customerName" />
+                            </button>
+                            <button
+                                onClick={() => handleSort('createdAt')}
+                                className="col-span-2 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                            >
+                                วันที่ <SortIcon field="createdAt" />
+                            </button>
+                            <button
+                                onClick={() => handleSort('totalAmount')}
+                                className="col-span-2 flex items-center justify-end hover:text-gray-900 text-right font-semibold group focus:outline-none w-full"
+                            >
+                                ยอดรวม <SortIcon field="totalAmount" />
+                            </button>
+                            <button
+                                onClick={() => handleSort('status')}
+                                className="col-span-1 flex items-center justify-center hover:text-gray-900 text-center font-semibold group focus:outline-none w-full"
+                            >
+                                สถานะ <SortIcon field="status" />
+                            </button>
                             <div className="col-span-2 text-right">จัดการ</div>
                         </div>
 
@@ -756,6 +834,25 @@ export default function AdminOrdersPage() {
                                         <div className="hidden md:block col-span-3">
                                             <p className="font-medium text-sm text-gray-900 truncate">{order.customerName}</p>
                                             <p className="text-xs text-gray-400">{order.customerPhone}</p>
+                                            {order.items && order.items.length > 0 && (
+                                                <div className="mt-1.5 space-y-1">
+                                                    {order.items.map((item, idx) => {
+                                                        const itemStatus = item.status && itemStatusConfig[item.status];
+                                                        return (
+                                                            <div key={idx} className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                                                                <span className="truncate max-w-[120px]" title={item.productName}>
+                                                                    {item.productName}
+                                                                </span>
+                                                                {itemStatus && (
+                                                                    <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold ${itemStatus.bg} ${itemStatus.color}`}>
+                                                                        {itemStatus.label}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Date */}
