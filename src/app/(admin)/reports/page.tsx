@@ -155,7 +155,15 @@ const ORDER_COLUMNS = [
             return "";
         } 
     },
-    { key: "slipUrl", label: "ลิงก์รูปสลิป (Slip URL)", getValue: (order: ReportOrder) => order.slipUrl || "" },
+    { 
+        key: "slipUrl", 
+        label: "ลิงก์รูปสลิป (Slip URL)", 
+        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+            if (order.slipUrl) return order.slipUrl;
+            const slip = slipsMap?.get(order.id);
+            return slip?.imageUrl || slip?.base64 || "";
+        } 
+    },
     { key: "itemsCount", label: "จำนวนรายการสินค้า (Items)", getValue: (order: ReportOrder) => (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0) },
     { key: "addOns", label: "รายละเอียดสินค้าและท็อปปิ้ง (Add-ons)", getValue: (order: ReportOrder) => formatOrderAddOns(order) },
     { key: "subTotal", label: "ยอดเงินรวมสินค้า (Subtotal)", getValue: (order: ReportOrder) => Number(order.subTotal || 0) },
