@@ -9,7 +9,7 @@ import { th } from "date-fns/locale";
 import { CheckCircle, ChevronLeft, Clock, CreditCard, Loader2, MapPin, Package, RotateCcw, Truck, User, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { formatOrderId } from "@/lib/orderId";
-import { Order, OrderItemStatus, OrderStatus } from "@/types/order";
+import { Order, OrderItem, OrderItemStatus, OrderStatus } from "@/types/order";
 import { PickupOption, StoreSettings } from "@/types/store";
 
 type OrderItemsDraft = Order["items"];
@@ -142,10 +142,16 @@ export default function AdminOrderDetailPage() {
 
     useEffect(() => {
         if (order) {
-            setItemDrafts(order.items.map((item) => ({
-                ...item,
-                bundleItems: item.bundleItems?.map((bundleItem) => ({ ...bundleItem }))
-            })));
+            if (!isEditingItems) {
+                setItemDrafts(order.items.map((item) => ({
+                    ...item,
+                    addOns: item.addOns?.map((addOn) => ({ ...addOn })),
+                    bundleItems: item.bundleItems?.map((bundleItem) => ({
+                        ...bundleItem,
+                        selectedAddOns: bundleItem.selectedAddOns?.map((addOn) => ({ ...addOn }))
+                    }))
+                })));
+            }
             setIssueReplyDrafts(Object.fromEntries(
                 order.items.flatMap((item, index) => [
                     [`${index}`, item.issueAdminReply || ""],
@@ -155,9 +161,8 @@ export default function AdminOrderDetailPage() {
                     ] as const) || [])
                 ])
             ));
-            setIsEditingItems(false);
         }
-    }, [order]);
+    }, [order, isEditingItems]);
 
     const createdAt = useMemo(() => order ? toDate(order.createdAt) : new Date(), [order]);
     const pickupOptions = useMemo(() => getActivePickupOptions(storeSettings), [storeSettings]);
@@ -312,7 +317,7 @@ export default function AdminOrderDetailPage() {
             if (index !== itemIndex) return item;
             return {
                 ...item,
-                bundleItems: item.bundleItems?.map((bundleItem, childIndex) => (
+                bundleItems: (item.bundleItems || []).map((bundleItem, childIndex) => (
                     childIndex === bundleItemIndex ? { ...bundleItem, ...updates } : bundleItem
                 ))
             };
@@ -324,12 +329,12 @@ export default function AdminOrderDetailPage() {
         addOnIndex: number,
         updates: Partial<NonNullable<OrderItemsDraft[number]["addOns"]>[number]>
     ) => {
-        setItemDrafts((prev) => prev.map((item, index) => {
-            if (index !== itemIndex) return item;
+        setItemDrafts((prev) => prev.map((item, iIdx) => {
+            if (iIdx !== itemIndex) return item;
             return {
                 ...item,
-                addOns: item.addOns?.map((addOn, index) => (
-                    index === addOnIndex ? { ...addOn, ...updates } : addOn
+                addOns: (item.addOns || []).map((addOn, aIdx) => (
+                    aIdx === addOnIndex ? { ...addOn, ...updates } : addOn
                 ))
             };
         }));
@@ -341,16 +346,16 @@ export default function AdminOrderDetailPage() {
         addOnIndex: number,
         updates: Partial<NonNullable<NonNullable<OrderItemsDraft[number]["bundleItems"]>[number]["selectedAddOns"]>[number]>
     ) => {
-        setItemDrafts((prev) => prev.map((item, index) => {
-            if (index !== itemIndex) return item;
+        setItemDrafts((prev) => prev.map((item, iIdx) => {
+            if (iIdx !== itemIndex) return item;
             return {
                 ...item,
-                bundleItems: item.bundleItems?.map((bundleItem, index) => {
-                    if (index !== bundleItemIndex) return bundleItem;
+                bundleItems: (item.bundleItems || []).map((bundleItem, bIdx) => {
+                    if (bIdx !== bundleItemIndex) return bundleItem;
                     return {
                         ...bundleItem,
-                        selectedAddOns: bundleItem.selectedAddOns?.map((addOn, index) => (
-                            index === addOnIndex ? { ...addOn, ...updates } : addOn
+                        selectedAddOns: (bundleItem.selectedAddOns || []).map((addOn, aIdx) => (
+                            aIdx === addOnIndex ? { ...addOn, ...updates } : addOn
                         ))
                     };
                 })
@@ -363,34 +368,71 @@ export default function AdminOrderDetailPage() {
         const normalizedItems = itemDrafts.map((item) => {
             const price = toNumber(item.finalPrice ?? item.price);
             const quantity = Math.max(1, toNumber(item.quantity));
-            return {
-                ...item,
+            const cleanedItem: Record<string, unknown> = {
+                productId: item.productId || "",
                 productName: item.productName.trim() || "สินค้า",
-                variantInfo: item.variantInfo?.trim() || null,
                 price,
                 finalPrice: price,
                 quantity,
-                addOns: item.addOns?.map((addOn) => ({
-                    ...addOn,
+            };
+
+            if (item.variantInfo?.trim()) cleanedItem.variantInfo = item.variantInfo.trim();
+            if (item.imageUrl) cleanedItem.imageUrl = item.imageUrl;
+            if (item.status) cleanedItem.status = item.status;
+            if (item.pickupOptionId) cleanedItem.pickupOptionId = item.pickupOptionId;
+            if (item.pickupLabel) cleanedItem.pickupLabel = item.pickupLabel;
+            if (item.pickupDetail) cleanedItem.pickupDetail = item.pickupDetail;
+            if (item.issueReason) cleanedItem.issueReason = item.issueReason;
+            if (item.issueReportedAt) cleanedItem.issueReportedAt = item.issueReportedAt;
+            if (item.issueReportedByCustomer !== undefined) cleanedItem.issueReportedByCustomer = item.issueReportedByCustomer;
+            if (item.issueAdminReply) cleanedItem.issueAdminReply = item.issueAdminReply;
+            if (item.issueAdminRepliedAt) cleanedItem.issueAdminRepliedAt = item.issueAdminRepliedAt;
+
+            if (item.addOns && item.addOns.length > 0) {
+                cleanedItem.addOns = item.addOns.map((addOn) => ({
+                    id: addOn.id || "",
                     name: addOn.name.trim() || "บริการเสริม",
                     value: addOn.value?.trim() || "",
                     price: toNumber(addOn.price)
-                })),
-                bundleItems: item.bundleItems?.map((bundleItem) => ({
-                    ...bundleItem,
-                    productName: bundleItem.productName.trim() || "สินค้าในเซต",
-                    variantName: bundleItem.variantName?.trim() || "",
-                    unitPrice: toNumber(bundleItem.unitPrice),
-                    quantity: Math.max(1, toNumber(bundleItem.quantity)),
-                    selectedAddOns: bundleItem.selectedAddOns?.map((addOn) => ({
-                        ...addOn,
-                        name: addOn.name.trim() || "บริการเสริม",
-                        value: addOn.value?.trim() || "",
-                        price: toNumber(addOn.price)
-                    }))
-                }))
-            };
+                }));
+            }
+
+            if (item.bundleItems && item.bundleItems.length > 0) {
+                cleanedItem.bundleItems = item.bundleItems.map((bundleItem) => {
+                    const cleanedBundle: Record<string, unknown> = {
+                        id: bundleItem.id || "",
+                        productId: bundleItem.productId || "",
+                        productName: bundleItem.productName.trim() || "สินค้าในเซต",
+                        variantName: bundleItem.variantName?.trim() || "",
+                        unitPrice: toNumber(bundleItem.unitPrice),
+                        quantity: Math.max(1, toNumber(bundleItem.quantity))
+                    };
+                    if (bundleItem.variantId) cleanedBundle.variantId = bundleItem.variantId;
+                    if (bundleItem.status) cleanedBundle.status = bundleItem.status;
+                    if (bundleItem.pickupOptionId) cleanedBundle.pickupOptionId = bundleItem.pickupOptionId;
+                    if (bundleItem.pickupLabel) cleanedBundle.pickupLabel = bundleItem.pickupLabel;
+                    if (bundleItem.pickupDetail) cleanedBundle.pickupDetail = bundleItem.pickupDetail;
+                    if (bundleItem.issueReason) cleanedBundle.issueReason = bundleItem.issueReason;
+                    if (bundleItem.issueReportedAt) cleanedBundle.issueReportedAt = bundleItem.issueReportedAt;
+                    if (bundleItem.issueReportedByCustomer !== undefined) cleanedBundle.issueReportedByCustomer = bundleItem.issueReportedByCustomer;
+                    if (bundleItem.issueAdminReply) cleanedBundle.issueAdminReply = bundleItem.issueAdminReply;
+                    if (bundleItem.issueAdminRepliedAt) cleanedBundle.issueAdminRepliedAt = bundleItem.issueAdminRepliedAt;
+
+                    if (bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0) {
+                        cleanedBundle.selectedAddOns = bundleItem.selectedAddOns.map((addOn) => ({
+                            id: addOn.id || "",
+                            name: addOn.name.trim() || "บริการเสริม",
+                            value: addOn.value?.trim() || "",
+                            price: toNumber(addOn.price)
+                        }));
+                    }
+                    return cleanedBundle;
+                });
+            }
+
+            return cleanedItem as unknown as OrderItem;
         });
+
         const totalAmount = calculateItemsTotal(normalizedItems) + toNumber(order.deliveryFee);
 
         try {
@@ -401,9 +443,25 @@ export default function AdminOrderDetailPage() {
                 updatedAt: serverTimestamp()
             });
             setIsEditingItems(false);
+        } catch (error) {
+            console.error("Failed to save items:", error);
+            alert("บันทึกรายการสินค้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
         } finally {
             setSavingItems(false);
         }
+    };
+
+    const cancelItemEditing = () => {
+        if (!order) return;
+        setItemDrafts(order.items.map((item) => ({
+            ...item,
+            addOns: item.addOns?.map((addOn) => ({ ...addOn })),
+            bundleItems: item.bundleItems?.map((bundleItem) => ({
+                ...bundleItem,
+                selectedAddOns: bundleItem.selectedAddOns?.map((addOn) => ({ ...addOn }))
+            }))
+        })));
+        setIsEditingItems(false);
     };
 
     const saveIssueReply = async (itemIndex: number, bundleItemIndex: number | null = null) => {
@@ -445,15 +503,6 @@ export default function AdminOrderDetailPage() {
         } finally {
             setSavingIssueReplyKey(null);
         }
-    };
-
-    const cancelItemEditing = () => {
-        if (!order || savingItems) return;
-        setItemDrafts(order.items.map((item) => ({
-            ...item,
-            bundleItems: item.bundleItems?.map((bundleItem) => ({ ...bundleItem }))
-        })));
-        setIsEditingItems(false);
     };
 
     if (loading) {

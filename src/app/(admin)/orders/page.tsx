@@ -766,7 +766,7 @@ export default function AdminOrdersPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 {isLoading ? (
                     <div className="p-8 text-center text-gray-500">
                         <Loader2 className="animate-spin mx-auto mb-2" size={24} />
@@ -780,7 +780,7 @@ export default function AdminOrdersPage() {
                 ) : (
                     <>
                         {/* Table Header */}
-                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 border-b select-none">
+                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2.5 bg-gray-50 text-xs font-semibold text-gray-600 border-b border-gray-200 select-none">
                             <button
                                 onClick={() => handleSort('id')}
                                 className="col-span-2 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
@@ -815,7 +815,7 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* Table Body */}
-                        <div className="divide-y divide-gray-50">
+                        <div className="divide-y divide-gray-200">
                             {paginatedOrders.map((order) => {
                                 const status = statusConfig[order.status];
                                 const customerIssueCount = getCustomerIssueCount(order);
@@ -916,7 +916,7 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* Pagination */}
-                        <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
                             <div className="flex flex-wrap items-center gap-3 text-gray-500">
                                 <span>
                                     {pageStart}-{pageEnd} จาก {filteredOrders.length}
