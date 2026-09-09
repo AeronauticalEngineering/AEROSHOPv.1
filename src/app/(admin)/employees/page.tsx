@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Pencil, Trash2, Search, X, User, Save, ChevronLeft, ChevronRight, Loader2, Mail, Phone, Shield, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { UserProfile } from "@/types/user";
 import { collection, deleteDoc, doc, onSnapshot, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 
 // --- Schema Validation ---
 // Base schema for shared fields
@@ -76,19 +76,22 @@ export default function AdminEmployeesPage() {
                 delete payload.password;
             }
 
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
             let res;
             if (editingEmployee) {
                 // Edit: Use API to update Auth & Firestore
                 res = await fetch('/api/admin/users', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...authHeaders },
                     body: JSON.stringify({ ...payload, uid: editingEmployee.id }) // Include UID
                 });
             } else {
                 // Create: Call API
                 res = await fetch('/api/admin/users', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...authHeaders },
                     body: JSON.stringify(payload)
                 });
             }
@@ -111,7 +114,13 @@ export default function AdminEmployeesPage() {
         if (!confirm("ยืนยันลบพนักงานคนนี้? ข้อมูลและสิทธิ์การเข้าใช้งานจะถูกลบถาวร")) return;
 
         try {
-            const res = await fetch(`/api/admin/users?uid=${id}`, { method: 'DELETE' });
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
+            const res = await fetch(`/api/admin/users?uid=${id}`, {
+                method: 'DELETE',
+                headers: authHeaders
+            });
 
             if (!res.ok) {
                 console.warn("API delete failed, falling back to Firestore delete");

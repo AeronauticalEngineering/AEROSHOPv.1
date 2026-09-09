@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, increment, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { Order, OrderItemStatus, OrderStatus } from "@/types/order";
 import { PickupOption, StoreSettings } from "@/types/store";
 import { formatOrderId } from "@/lib/orderId";
@@ -250,9 +250,12 @@ export default function AdminOrdersPage() {
                 newStatus,
                 at: new Date().toISOString(),
             });
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
             const res = await fetch("/api/orders/update-status", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...authHeaders },
                 body: JSON.stringify({
                     orderId,
                     status: newStatus,

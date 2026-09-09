@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { ChevronLeft, User, ShoppingBag, MapPin, LogOut, ChevronRight, Settings, Ticket } from "lucide-react";
+import { User, ShoppingBag, MapPin, LogOut, ChevronRight, Ticket } from "lucide-react";
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -16,9 +16,8 @@ export default function ProfilePage() {
         <div className="flex flex-col min-h-screen bg-gray-50">
             {/* Header */}
             <div className="bg-white sticky top-0 z-20 border-b border-gray-100">
-
                 {/* Profile Card */}
-                <div className="px-6 pb-6 pt-2 text-center">
+                <div className="px-6 pb-6 pt-4 text-center">
                     <div className="w-20 h-20 mx-auto bg-gray-100 rounded-full flex items-center justify-center overflow-hidden mb-3 border-4 border-white shadow-sm">
                         {userPic ? (
                             <img src={userPic} alt={userName} className="w-full h-full object-cover" />

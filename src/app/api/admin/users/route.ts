@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin from "@/lib/firebaseAdmin";
 import { UserRole } from "@/types/user";
+import { verifyAdminRequest } from "@/lib/authHelper";
 
 export async function POST(req: NextRequest) {
     if (!admin.apps.length) {
         return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
+    const authCheck = await verifyAdminRequest(req, false);
+    if (!authCheck.authorized) {
+        return NextResponse.json({ error: authCheck.error || "Unauthorized" }, { status: 401 });
     }
 
     try {
@@ -50,6 +56,11 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
     if (!admin.apps.length) {
         return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
+    const authCheck = await verifyAdminRequest(req, false);
+    if (!authCheck.authorized) {
+        return NextResponse.json({ error: authCheck.error || "Unauthorized" }, { status: 401 });
     }
 
     try {
@@ -104,6 +115,11 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
     if (!admin.apps.length) {
         return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
+    const authCheck = await verifyAdminRequest(req, false);
+    if (!authCheck.authorized) {
+        return NextResponse.json({ error: authCheck.error || "Unauthorized" }, { status: 401 });
     }
 
     try {

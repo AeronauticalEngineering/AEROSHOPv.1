@@ -648,6 +648,10 @@ export default function CheckoutPaymentPage() {
                 return nextOrderId;
             });
 
+            if (typeof window !== "undefined") {
+                sessionStorage.setItem("last_created_order_id", orderId);
+            }
+
             // Save customer data
             await saveCustomer(orderId);
 
@@ -679,6 +683,11 @@ export default function CheckoutPaymentPage() {
 
                 const { url } = await stripeRes.json();
                 if (url) {
+                    if (typeof window !== "undefined") {
+                        sessionStorage.removeItem("checkout_address");
+                        sessionStorage.removeItem("selected_shipping_location");
+                    }
+                    clearCart();
                     window.location.href = url;
                     return; // Prevent further execution while redirecting
                 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, updateDoc, serverTimestamp, arrayRemove } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronLeft, Users, Phone, MapPin, ShoppingBag, TrendingUp, Clock, Package, CheckCircle, Truck, XCircle, Calendar, CreditCard, X, User, Trash2, Pencil, Save, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
@@ -172,9 +172,12 @@ export default function CustomerDetailPage() {
 
     const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
         try {
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
             const res = await fetch("/api/orders/update-status", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...authHeaders },
                 body: JSON.stringify({ orderId, status: newStatus })
             });
             if (!res.ok) {

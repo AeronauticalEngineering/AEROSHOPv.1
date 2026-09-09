@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
-import { CheckCircle, ChevronLeft, Clock, CreditCard, Loader2, MapPin, Package, RotateCcw, Truck, User, XCircle } from "lucide-react";
-import { db } from "@/lib/firebase";
+import { CheckCircle, ChevronLeft, Clock, CreditCard, Loader2, MapPin, Package, Pencil, Plus, RotateCcw, Trash2, Truck, User, XCircle } from "lucide-react";
+import { db, auth } from "@/lib/firebase";
 import { formatOrderId } from "@/lib/orderId";
 import { Order, OrderItem, OrderItemStatus, OrderStatus } from "@/types/order";
 import { PickupOption, StoreSettings } from "@/types/store";
@@ -110,6 +110,174 @@ export default function AdminOrderDetailPage() {
     const [issueReplyDrafts, setIssueReplyDrafts] = useState<Record<string, string>>({});
     const [savingIssueReplyKey, setSavingIssueReplyKey] = useState<string | null>(null);
 
+    // Order Edit Request (Add-ons / Items) & Customer info edit
+    const [pendingOrderRequest, setPendingOrderRequest] = useState<{ id: string; details: string; reason: string; itemName?: string } | null>(null);
+    const [processingOrderRequest, setProcessingOrderRequest] = useState(false);
+    const [isEditingCustomerInfo, setIsEditingCustomerInfo] = useState(false);
+    const [editCustomerName, setEditCustomerName] = useState("");
+    const [editCustomerPhone, setEditCustomerPhone] = useState("");
+    const [editShippingAddress, setEditShippingAddress] = useState("");
+    const [savingCustomerInfo, setSavingCustomerInfo] = useState(false);
+
+    useEffect(() => {
+        if (!orderId) return;
+        const q = query(
+            collection(db, "order_edit_requests"),
+            where("orderId", "==", orderId),
+            where("status", "==", "pending")
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const docData = snapshot.docs[0].data();
+                setPendingOrderRequest({
+                    id: snapshot.docs[0].id,
+                    details: docData.details || "",
+                    reason: docData.reason || "",
+                    itemName: docData.itemName || undefined
+                });
+            } else {
+                setPendingOrderRequest(null);
+            }
+        }, (err) => console.warn("Error listening to order requests:", err));
+
+        return () => unsubscribe();
+    }, [orderId]);
+
+    const handleResolveOrderRequest = async (requestId: string) => {
+        if (!confirm("ยืนยันว่าได้ดำเนินการแก้ไขออเดอร์/บริการเสริมเรียบร้อยแล้ว?")) return;
+        try {
+            setProcessingOrderRequest(true);
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+            const res = await fetch("/api/order-requests/resolve", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ requestId, action: "complete", adminNote: "ดำเนินการเรียบร้อยแล้ว" })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to resolve");
+            alert("บันทึกดำเนินการเรียบร้อยแล้ว");
+        } catch (err: any) {
+            alert(err.message || "เกิดข้อผิดพลาด");
+        } finally {
+            setProcessingOrderRequest(false);
+        }
+    };
+
+    const handleRejectOrderRequest = async (requestId: string) => {
+        const reason = prompt("ระบุเหตุผลการปฏิเสธคำขอ:");
+        if (reason === null) return;
+        try {
+            setProcessingOrderRequest(true);
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+            const res = await fetch("/api/order-requests/resolve", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ requestId, action: "reject", adminNote: reason })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to reject");
+            alert("ปฏิเสธคำขอเรียบร้อยแล้ว");
+        } catch (err: any) {
+            alert(err.message || "เกิดข้อผิดพลาด");
+        } finally {
+            setProcessingOrderRequest(false);
+        }
+    };
+
+    // Add-on management helpers
+    const addItemAddOn = (itemIndex: number) => {
+        setItemDrafts((prev) => prev.map((item, index) => {
+            if (index !== itemIndex) return item;
+            const currentAddOns = item.addOns || [];
+            const newAddOn: OrderAddOnDraft = {
+                id: `addon-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                name: "บริการเสริมใหม่",
+                value: "",
+                price: 0
+            };
+            return { ...item, addOns: [...currentAddOns, newAddOn] };
+        }));
+    };
+
+    const removeItemAddOn = (itemIndex: number, addOnIndex: number) => {
+        setItemDrafts((prev) => prev.map((item, index) => {
+            if (index !== itemIndex) return item;
+            return {
+                ...item,
+                addOns: (item.addOns || []).filter((_, aIdx) => aIdx !== addOnIndex)
+            };
+        }));
+    };
+
+    const addBundleAddOn = (itemIndex: number, bundleIndex: number) => {
+        setItemDrafts((prev) => prev.map((item, iIdx) => {
+            if (iIdx !== itemIndex) return item;
+            return {
+                ...item,
+                bundleItems: (item.bundleItems || []).map((bundleItem, bIdx) => {
+                    if (bIdx !== bundleIndex) return bundleItem;
+                    const currentAddOns = bundleItem.selectedAddOns || [];
+                    const newAddOn: OrderAddOnDraft = {
+                        id: `addon-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                        name: "บริการเสริมใหม่",
+                        value: "",
+                        price: 0
+                    };
+                    return { ...bundleItem, selectedAddOns: [...currentAddOns, newAddOn] };
+                })
+            };
+        }));
+    };
+
+    const removeBundleAddOn = (itemIndex: number, bundleIndex: number, addOnIndex: number) => {
+        setItemDrafts((prev) => prev.map((item, iIdx) => {
+            if (iIdx !== itemIndex) return item;
+            return {
+                ...item,
+                bundleItems: (item.bundleItems || []).map((bundleItem, bIdx) => {
+                    if (bIdx !== bundleIndex) return bundleItem;
+                    return {
+                        ...bundleItem,
+                        selectedAddOns: (bundleItem.selectedAddOns || []).filter((_, aIdx) => aIdx !== addOnIndex)
+                    };
+                })
+            };
+        }));
+    };
+
+    const handleSaveCustomerInfo = async () => {
+        if (!order || savingCustomerInfo) return;
+        const trimmedName = editCustomerName.trim();
+        if (!trimmedName) {
+            alert("ชื่อผู้รับไม่สามารถเว้นว่างได้");
+            return;
+        }
+        try {
+            setSavingCustomerInfo(true);
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+            const res = await fetch("/api/admin/orders/update-customer-info", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({
+                    orderId: order.id,
+                    customerName: trimmedName,
+                    customerPhone: editCustomerPhone.trim(),
+                    shippingAddress: editShippingAddress.trim()
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to update info");
+            setIsEditingCustomerInfo(false);
+        } catch (err: any) {
+            alert(err.message || "เกิดข้อผิดพลาด");
+        } finally {
+            setSavingCustomerInfo(false);
+        }
+    };
+
     useEffect(() => {
         if (!orderId) return;
         const unsubscribe = onSnapshot(doc(db, "orders", orderId), (snapshot) => {
@@ -171,10 +339,31 @@ export default function AdminOrderDetailPage() {
         if (!order || updatingStatus) return;
         try {
             setUpdatingStatus(status);
-            await updateDoc(doc(db, "orders", order.id), {
-                status,
-                updatedAt: serverTimestamp()
+            const idToken = await auth?.currentUser?.getIdToken();
+            const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
+            const res = await fetch("/api/orders/update-status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({
+                    orderId: order.id,
+                    status,
+                    paymentDetail: order.paymentDetail || null,
+                    shippingDetail: order.shippingDetail || null,
+                    trackingNumber: order.trackingNumber || null,
+                    completionDetail: order.completionDetail || null,
+                    cancelReason: order.cancelReason || null,
+                    returnReason: order.returnReason || null
+                })
             });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data?.error || "Update failed");
+            }
+        } catch (error: any) {
+            console.error("Error updating status:", error);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error.message || error}`);
         } finally {
             setUpdatingStatus(null);
         }
@@ -565,22 +754,140 @@ export default function AdminOrderDetailPage() {
                 </div>
             </div>
 
+            {/* Pending Order Edit Request Banner */}
+            {pendingOrderRequest && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/95 p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-lg bg-blue-100 p-2 text-blue-700 mt-0.5">
+                                <Package size={18} />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-blue-800">มีคำขอแก้ไขออเดอร์ / บริการเสริมจากลูกค้า</span>
+                                    <span className="rounded-full bg-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-900">รอตรวจสอบ</span>
+                                </div>
+                                <p className="mt-1 text-sm font-semibold text-gray-900">
+                                    {pendingOrderRequest.itemName ? `สินค้า: ${pendingOrderRequest.itemName} — ` : ""}
+                                    สิ่งที่ขอแก้ไข: <span className="text-blue-900 font-bold">{pendingOrderRequest.details}</span>
+                                </p>
+                                {pendingOrderRequest.reason && (
+                                    <p className="mt-0.5 text-xs text-gray-600">เหตุผล: {pendingOrderRequest.reason}</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                            <button
+                                type="button"
+                                disabled={processingOrderRequest}
+                                onClick={() => handleRejectOrderRequest(pendingOrderRequest.id)}
+                                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                ปฏิเสธ
+                            </button>
+                            <button
+                                type="button"
+                                disabled={processingOrderRequest}
+                                onClick={() => handleResolveOrderRequest(pendingOrderRequest.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {processingOrderRequest ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={13} />}
+                                บันทึกดำเนินการเรียบร้อย
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_1.1fr]">
                 <div className="space-y-4">
                     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                        <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
-                            <User size={16} className="text-gray-500" />
-                            <span className="text-sm font-semibold text-gray-900">ข้อมูลลูกค้า</span>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
-                            {getLineName(order) && (
-                                <InfoItem label="LINE Name" value={getLineName(order)} className="sm:col-span-2" />
+                        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
+                            <div className="flex items-center gap-3">
+                                <User size={16} className="text-gray-500" />
+                                <span className="text-sm font-semibold text-gray-900">ข้อมูลลูกค้า</span>
+                            </div>
+                            {!isEditingCustomerInfo ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditCustomerName(order.customerName || "");
+                                        setEditCustomerPhone(order.customerPhone || "");
+                                        setEditShippingAddress(order.shippingAddress || "");
+                                        setIsEditingCustomerInfo(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                    <Pencil size={12} />
+                                    แก้ไขข้อมูล
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={savingCustomerInfo}
+                                        onClick={() => setIsEditingCustomerInfo(false)}
+                                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={savingCustomerInfo}
+                                        onClick={handleSaveCustomerInfo}
+                                        className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        {savingCustomerInfo && <Loader2 size={11} className="animate-spin" />}
+                                        บันทึก
+                                    </button>
+                                </div>
                             )}
-                            <InfoItem label="ชื่อ" value={order.customerName} />
-                            <InfoItem label="เบอร์โทร" value={order.customerPhone} />
-                            {order.customerCitizenId && <InfoItem label="เลขบัตรประชาชน" value={order.customerCitizenId} />}
-                            <InfoItem label="Customer ID" value={order.customerId || order.userId || "-"} className="sm:col-span-2 break-all font-mono text-xs" />
                         </div>
+
+                        {isEditingCustomerInfo ? (
+                            <div className="space-y-3 p-4">
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-gray-700">ชื่อผู้รับ <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        value={editCustomerName}
+                                        onChange={(e) => setEditCustomerName(e.target.value)}
+                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="ชื่อ-นามสกุล"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-gray-700">เบอร์โทร</label>
+                                    <input
+                                        type="tel"
+                                        value={editCustomerPhone}
+                                        onChange={(e) => setEditCustomerPhone(e.target.value)}
+                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="08xxxxxxxx"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-semibold text-gray-700">ที่อยู่จัดส่ง</label>
+                                    <textarea
+                                        rows={3}
+                                        value={editShippingAddress}
+                                        onChange={(e) => setEditShippingAddress(e.target.value)}
+                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="รายละเอียดที่อยู่จัดส่ง"
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+                                {getLineName(order) && (
+                                    <InfoItem label="LINE Name" value={getLineName(order)} className="sm:col-span-2" />
+                                )}
+                                <InfoItem label="ชื่อ" value={order.customerName} />
+                                <InfoItem label="เบอร์โทร" value={order.customerPhone} />
+                                {order.customerCitizenId && <InfoItem label="เลขบัตรประชาชน" value={order.customerCitizenId} />}
+                                <InfoItem label="Customer ID" value={order.customerId || order.userId || "-"} className="sm:col-span-2 break-all font-mono text-xs" />
+                            </div>
+                        )}
                     </section>
 
                     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
@@ -726,18 +1033,31 @@ export default function AdminOrderDetailPage() {
                                                 ฿{(toNumber(item.finalPrice ?? item.price) * toNumber(item.quantity)).toLocaleString()}
                                             </p>
                                         </div>
-                                        {item.addOns?.length ? (
-                                            <div className="space-y-1.5 xl:col-span-4">
-                                                {item.addOns.map((addOn, addOnIndex) => (
-                                                    <AddOnEditor
-                                                        key={addOn.id}
-                                                        addOn={addOn}
-                                                        disabled={!isEditingItems}
-                                                        onChange={(updates) => updateItemAddOnDraft(index, addOnIndex, updates)}
-                                                    />
-                                                ))}
-                                            </div>
-                                        ) : null}
+                                        <div className="space-y-1.5 xl:col-span-4">
+                                            {item.addOns && item.addOns.length > 0 ? (
+                                                <div className="space-y-1.5">
+                                                    {item.addOns.map((addOn, addOnIndex) => (
+                                                        <AddOnEditor
+                                                            key={addOn.id || `item-${index}-addon-${addOnIndex}`}
+                                                            addOn={addOn}
+                                                            disabled={!isEditingItems}
+                                                            onDelete={() => removeItemAddOn(index, addOnIndex)}
+                                                            onChange={(updates) => updateItemAddOnDraft(index, addOnIndex, updates)}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                            {isEditingItems && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => addItemAddOn(index)}
+                                                    className="inline-flex items-center gap-1 rounded border border-dashed border-gray-300 bg-gray-50/60 px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <Plus size={12} />
+                                                    เพิ่มบริการเสริม
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     {item.bundleItems?.length ? (
                                         <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
@@ -798,19 +1118,32 @@ export default function AdminOrderDetailPage() {
                                                                 className="h-7 w-full rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-700 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-700"
                                                                 aria-label="ตัวเลือกสินค้าในเซต"
                                                             />
-                                                            {bundleItem.selectedAddOns?.length ? (
-                                                                <div className="space-y-1">
-                                                                    {bundleItem.selectedAddOns.map((addOn, addOnIndex) => (
-                                                                        <AddOnEditor
-                                                                            key={addOn.id}
-                                                                            addOn={addOn}
-                                                                            disabled={!isEditingItems}
-                                                                            compact
-                                                                            onChange={(updates) => updateBundleAddOnDraft(index, bundleIndex, addOnIndex, updates)}
-                                                                        />
-                                                                    ))}
-                                                                </div>
-                                                            ) : null}
+                                                            <div className="space-y-1 mt-1">
+                                                                {bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0 ? (
+                                                                    <div className="space-y-1">
+                                                                        {bundleItem.selectedAddOns.map((addOn, addOnIndex) => (
+                                                                            <AddOnEditor
+                                                                                key={addOn.id || `bundle-${index}-${bundleIndex}-addon-${addOnIndex}`}
+                                                                                addOn={addOn}
+                                                                                disabled={!isEditingItems}
+                                                                                compact
+                                                                                onDelete={() => removeBundleAddOn(index, bundleIndex, addOnIndex)}
+                                                                                onChange={(updates) => updateBundleAddOnDraft(index, bundleIndex, addOnIndex, updates)}
+                                                                            />
+                                                                        ))}
+                                                                    </div>
+                                                                ) : null}
+                                                                {isEditingItems && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => addBundleAddOn(index, bundleIndex)}
+                                                                        className="inline-flex items-center gap-1 rounded border border-dashed border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                                                                    >
+                                                                        <Plus size={10} />
+                                                                        เพิ่มบริการเสริมในเซต
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <NumberField
                                                             label="ราคา"
@@ -929,20 +1262,27 @@ function NumberField({
 function AddOnEditor({
     addOn,
     onChange,
+    onDelete,
     disabled,
     compact = false
 }: {
     addOn: OrderAddOnDraft;
     onChange: (updates: Partial<OrderAddOnDraft>) => void;
+    onDelete?: () => void;
     disabled: boolean;
     compact?: boolean;
 }) {
     return (
-        <div className={`grid grid-cols-1 gap-1.5 rounded-md border border-gray-100 bg-gray-50 p-1.5 ${compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_70px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_84px]"}`}>
+        <div className={`grid grid-cols-1 items-center gap-1.5 rounded-md border border-gray-100 bg-gray-50 p-1.5 ${
+            !disabled && onDelete
+                ? (compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_65px_28px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_75px_28px]")
+                : (compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_70px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_84px]")
+        }`}>
             <input
                 value={addOn.name}
                 onChange={(event) => onChange({ name: event.target.value })}
                 disabled={disabled}
+                placeholder="ชื่อบริการเสริม"
                 className="h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-700"
                 aria-label="ชื่อบริการเสริม"
             />
@@ -950,6 +1290,7 @@ function AddOnEditor({
                 value={addOn.value || ""}
                 onChange={(event) => onChange({ value: event.target.value })}
                 disabled={disabled}
+                placeholder="รายละเอียด/ค่า"
                 className="h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-700 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-600"
                 aria-label="ค่าบริการเสริม"
             />
@@ -959,9 +1300,20 @@ function AddOnEditor({
                 value={toNumber(addOn.price)}
                 onChange={(event) => onChange({ price: toNumber(event.target.value) })}
                 disabled={disabled}
+                placeholder="ราคา"
                 className="h-7 rounded-md border border-gray-200 bg-white px-2 text-right text-[11px] font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-800"
                 aria-label="ราคาบริการเสริม"
             />
+            {!disabled && onDelete && (
+                <button
+                    type="button"
+                    onClick={onDelete}
+                    title="ลบบริการเสริม"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                >
+                    <Trash2 size={13} />
+                </button>
+            )}
         </div>
     );
 }

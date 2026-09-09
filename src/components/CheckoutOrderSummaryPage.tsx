@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, CheckCircle, MapPin, Phone, ReceiptText, User, X } from "lucide-react";
@@ -188,7 +188,7 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
 
     const handleCancelOrder = async () => {
         if (!orderId || !orderData || canceling) return;
-        if (orderData?.status === "cancelled" || orderData?.status === "completed") return;
+        if (orderData?.status === "cancelled" || orderData?.status === "completed" || orderData?.status === "shipped" || orderData?.status === "returned") return;
         try {
             setCanceling(true);
             const res = await fetch("/api/orders/update-status", {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
 import { buildAdminPaymentFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
+import { restoreOrderStock, deductOrderStock } from "@/lib/stockManagement";
+import { verifyAdminRequest } from "@/lib/authHelper";
 
 export const runtime = "nodejs";
 
@@ -60,6 +62,60 @@ export async function POST(req: Request) {
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const orderData = orderSnap.data() || {};
+    const previousStatus = orderData.status;
+
+    if (previousStatus === status) {
+      return NextResponse.json({ ok: true, message: "Status unchanged" });
+    }
+
+    const adminCheck = await verifyAdminRequest(req, true);
+    const isAdmin = adminCheck.authorized;
+
+    if (!isAdmin) {
+      if (status !== "cancelled") {
+        return NextResponse.json({ error: "Unauthorized status change" }, { status: 403 });
+      }
+
+      if (previousStatus === "shipped" || previousStatus === "completed" || previousStatus === "returned") {
+        return NextResponse.json({ error: "ไม่สามารถยกเลิกคำสั่งซื้อที่จัดส่งหรือดำเนินการสำเร็จแล้วได้" }, { status: 400 });
+      }
+    }
+
+    if (status === "cancelled" || status === "returned") {
+      await restoreOrderStock(db, orderData, orderId);
+
+      if (status === "cancelled" && previousStatus !== "cancelled") {
+        const customerId = orderData.customerId;
+        const totalAmount = Number(orderData.totalAmount) || 0;
+        if (customerId && totalAmount > 0) {
+          await db.doc(`customers/${customerId}`).update({
+            totalOrders: admin.firestore.FieldValue.increment(-1),
+            totalSpent: admin.firestore.FieldValue.increment(-totalAmount),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }).catch((err) => console.warn("Error reverting customer stats:", err));
+        }
+
+        const userId = orderData.userId;
+        if (userId) {
+          try {
+            const userCoupons = await db.collection(`users/${userId}/my_coupons`).where("orderId", "==", orderId).get();
+            for (const cDoc of userCoupons.docs) {
+              await cDoc.ref.update({
+                isUsed: false,
+                usedAt: admin.firestore.FieldValue.delete(),
+                orderId: admin.firestore.FieldValue.delete()
+              });
+            }
+          } catch (err) {
+            console.warn("Error restoring coupon for order:", err);
+          }
+        }
+      }
+    } else if (status === "paid") {
+      await deductOrderStock(db, orderData, orderId);
     }
 
     const order = (orderSnap.data() || {}) as OrderStatusUpdateData;

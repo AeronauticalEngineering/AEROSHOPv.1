@@ -16,9 +16,11 @@ import {
     Settings,
     Shield,
     ShoppingBag,
+    Sparkles,
     Tags,
     Ticket,
     User,
+    UserCheck,
     UserCog,
     Users,
     X,
@@ -83,6 +85,40 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         return () => unsubscribe();
     }, []);
 
+    // Listen to pending order edit requests
+    const [pendingOrderRequestsCount, setPendingOrderRequestsCount] = useState(0);
+    useEffect(() => {
+        const fetchPendingCountFromApi = async () => {
+            try {
+                const res = await fetch("/api/order-requests?status=pending");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data.requests)) {
+                        setPendingOrderRequestsCount(data.requests.length);
+                    }
+                }
+            } catch (e) {
+                console.warn("Error fetching pending order requests count:", e);
+            }
+        };
+
+        fetchPendingCountFromApi();
+
+        const q = query(
+            collection(db, "order_edit_requests"),
+            where("status", "==", "pending")
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setPendingOrderRequestsCount(snapshot.docs.length);
+        }, (err) => {
+            console.warn("Order edit requests count error:", err);
+            fetchPendingCountFromApi();
+        });
+
+        return () => unsubscribe();
+    }, []);
+
     // Organized Navigation Groups
     const menuGroups: MenuGroup[] = [
         {
@@ -103,6 +139,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     icon: ShoppingBag,
                     badge: pendingOrdersCount > 0 ? (pendingOrdersCount > 99 ? '99+' : pendingOrdersCount) : null,
                     badgeColor: 'orange',
+                },
+                {
+                    href: '/order-requests',
+                    label: 'คำขอแก้ไขออเดอร์',
+                    icon: Sparkles,
+                    badge: pendingOrderRequestsCount > 0 ? (pendingOrderRequestsCount > 99 ? '99+' : pendingOrderRequestsCount) : null,
+                    badgeColor: 'amber',
                 },
                 {
                     href: '/slip-checks',

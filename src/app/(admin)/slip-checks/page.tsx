@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { collection, limit, onSnapshot, orderBy, query, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import Link from "next/link";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
@@ -184,19 +184,31 @@ export default function SlipChecksPage() {
         verifiedAt: new Date()
       });
 
-      if (status === "verified" && slip.orderId) {
-        const res = await fetch("/api/orders/update-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: slip.orderId,
-            status: "paid",
-            paymentDetail: message
-          })
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data?.error || "Update order failed");
+      if (slip.orderId) {
+        if (status === "verified") {
+          const idToken = await auth?.currentUser?.getIdToken();
+          const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+
+          const res = await fetch("/api/orders/update-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({
+              orderId: slip.orderId,
+              status: "paid",
+              paymentDetail: message
+            })
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data?.error || "Update order failed");
+          }
+        } else {
+          // If rejected or manual check needed, update order's paymentStatus
+          await updateDoc(doc(db, "orders", slip.orderId), {
+            paymentStatus: status,
+            paymentDetail: message,
+            updatedAt: new Date()
+          }).catch(() => undefined);
         }
       }
 

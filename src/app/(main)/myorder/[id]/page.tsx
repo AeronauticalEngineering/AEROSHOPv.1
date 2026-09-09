@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, addDoc, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -11,6 +11,8 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { StoreSettings } from "@/types/store";
 import useLiff from "@/hooks/useLiff";
+import { useAuth } from "@/context/AuthContext";
+import useLiffAuth from "@/hooks/useLiffAuth";
 import { buildIssueReportFlexMessage, buildSlipResultFlexMessage } from "@/lib/line/flex";
 import { ProductBundleItem, SelectedProductAddOn } from "@/types/product";
 import { formatOrderId } from "@/lib/orderId";
@@ -49,6 +51,8 @@ type BundleExpandState = Record<string, boolean>;
 interface Order {
     id: string;
     orderNo?: string;
+    customerId?: string;
+    lineId?: string;
     status: 'pending' | 'paid' | 'processing' | 'shipped' | 'completed' | 'cancelled' | 'returned';
     totalAmount: number;
     items: OrderItem[];
@@ -101,8 +105,21 @@ export default function OrderDetailPage() {
     const [isSlipModalOpen, setIsSlipModalOpen] = useState(false);
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
 
+    // Order edit request state (Add-ons / Items)
+    const [pendingOrderRequest, setPendingOrderRequest] = useState<{ id: string; details: string; reason: string; itemName?: string } | null>(null);
+    const [isOrderEditModalOpen, setIsOrderEditModalOpen] = useState(false);
+    const [editItemName, setEditItemName] = useState("");
+    const [editDetails, setEditDetails] = useState("");
+    const [editReason, setEditReason] = useState("");
+    const [submittingOrderRequest, setSubmittingOrderRequest] = useState(false);
+    const [orderRequestError, setOrderRequestError] = useState("");
+    const [orderRequestSuccess, setOrderRequestSuccess] = useState("");
+
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     const { liff } = useLiff(liffId);
+    const { userProfile: authProfile, loading: authLoading } = useAuth();
+    const { userProfile: liffProfile } = useLiffAuth();
+    const userProfile = authProfile || liffProfile;
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -229,6 +246,89 @@ export default function OrderDetailPage() {
 
         return () => unsubscribe();
     }, [orderId, storeSettings?.enableSlipVerify]);
+
+    useEffect(() => {
+        if (!orderId) return;
+
+        const q = query(
+            collection(db, "order_edit_requests"),
+            where("orderId", "==", orderId),
+            where("status", "==", "pending")
+        );
+
+        const unsubscribe = onSnapshot(
+            q,
+            (snapshot) => {
+                if (!snapshot.empty) {
+                    const docData = snapshot.docs[0].data();
+                    setPendingOrderRequest({
+                        id: snapshot.docs[0].id,
+                        details: docData.details || "",
+                        reason: docData.reason || "",
+                        itemName: docData.itemName || undefined
+                    });
+                } else {
+                    setPendingOrderRequest(null);
+                }
+            },
+            (error) => {
+                console.warn("Error listening to order edit requests:", error);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [orderId]);
+
+    const handleOrderEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!order || submittingOrderRequest) return;
+        const trimmedDetails = editDetails.trim();
+        if (!trimmedDetails) {
+            setOrderRequestError("กรุณาระบุรายละเอียดบริการเสริมหรือสิ่งที่ต้องการแก้ไข");
+            return;
+        }
+        const trimmedReason = editReason.trim();
+        if (!trimmedReason) {
+            setOrderRequestError("กรุณาระบุเหตุผลในการขอแก้ไข");
+            return;
+        }
+
+        try {
+            setSubmittingOrderRequest(true);
+            setOrderRequestError("");
+            setOrderRequestSuccess("");
+            const res = await fetch("/api/order-requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    orderId: order.id,
+                    requestType: "addon",
+                    itemName: editItemName || undefined,
+                    details: trimmedDetails,
+                    reason: trimmedReason,
+                    customerId: order.customerId,
+                    userId: order.userId,
+                    lineId: order.lineId
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || "เกิดข้อผิดพลาดในการส่งคำขอ");
+            }
+            setOrderRequestSuccess("ส่งคำขอเรียบร้อยแล้ว แอดมินจะดำเนินการตรวจสอบและแก้ไขให้เร็วที่สุดค่ะ");
+            setTimeout(() => {
+                setIsOrderEditModalOpen(false);
+                setEditItemName("");
+                setEditDetails("");
+                setEditReason("");
+                setOrderRequestSuccess("");
+            }, 1800);
+        } catch (err: any) {
+            setOrderRequestError(err.message || "เกิดข้อผิดพลาด");
+        } finally {
+            setSubmittingOrderRequest(false);
+        }
+    };
 
     const getStatusInfo = (status: Order['status']) => {
         const styles = {
@@ -677,9 +777,58 @@ export default function OrderDetailPage() {
     const statusInfo = order ? getStatusInfo(order.status) : null;
     const canCancelOrder = order ? !["cancelled", "completed", "shipped", "returned"].includes(order.status) : false;
     const needsRefundChannel = order?.status === "paid" || order?.paymentStatus === "paid" || order?.paymentStatus === "verified";
+    const isOwnerOrStaff = useMemo(() => {
+        if (!order) return false;
+        if (typeof window !== "undefined" && sessionStorage.getItem("last_created_order_id") === order.id) {
+            return true;
+        }
+        if (userProfile?.role === "admin" || userProfile?.role === "employee") {
+            return true;
+        }
+        if (!userProfile) {
+            return false;
+        }
+        const userIdentifiers = [
+            userProfile.uid,
+            userProfile.id,
+            userProfile.lineId,
+            userProfile.phone
+        ].filter(Boolean) as string[];
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Loader2 className="animate-spin text-slate-400" /></div>;
+        const orderCustomerIdentifiers = [
+            order.userId,
+            order.customerId,
+            order.lineId,
+            order.customerPhone
+        ].filter(Boolean) as string[];
+
+        return userIdentifiers.some(id => orderCustomerIdentifiers.includes(id));
+    }, [order, userProfile]);
+
+    if (loading || authLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Loader2 className="animate-spin text-slate-400" /></div>;
     if (!order) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-400">ไม่พบคำสั่งซื้อ</div>;
+
+    if (!isOwnerOrStaff) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4 text-center">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 max-w-sm w-full space-y-3 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                        <CircleAlert size={24} />
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900">ไม่สามารถเข้าถึงคำสั่งซื้อนี้ได้</h2>
+                    <p className="text-xs text-slate-500">
+                        คำสั่งซื้อนี้ไม่ใช่ของคุณ หรือคุณอาจยังไม่ได้เข้าสู่ระบบด้วยบัญชีที่ใช้สั่งซื้อ
+                    </p>
+                    <Link
+                        href="/"
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800"
+                    >
+                        กลับไปหน้าหลัก
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     const issueParentItem = issueItemIndex !== null ? order.items[issueItemIndex] : null;
     const issueItem = issueBundleItemIndex !== null
@@ -743,7 +892,7 @@ export default function OrderDetailPage() {
                 {/* Info Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Customer Info */}
-                    <div className="bg-white rounded-2xl border border-slate-200  p-4 space-y-3">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
                         <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                             <MapPin size={16} className="text-slate-400" />
                             <h3 className="text-sm font-semibold text-slate-900">ที่อยู่จัดส่ง</h3>
@@ -785,11 +934,47 @@ export default function OrderDetailPage() {
                 </div>
 
                 {/* Items List */}
-                <div className="bg-white rounded-2xl border border-slate-200  overflow-hidden">
-                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center gap-2">
-                        <Package size={16} className="text-slate-400" />
-                        <h3 className="text-sm font-semibold text-slate-900">รายการสินค้า</h3>
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Package size={16} className="text-slate-400" />
+                            <h3 className="text-sm font-semibold text-slate-900">รายการสินค้า</h3>
+                        </div>
+                        {!['shipped', 'completed', 'cancelled'].includes(order.status) && (
+                            pendingOrderRequest ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-200">
+                                    <Clock size={11} />
+                                    รอตรวจสอบคำขอแก้ไข
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditItemName("");
+                                        setEditDetails("");
+                                        setEditReason("");
+                                        setOrderRequestError("");
+                                        setIsOrderEditModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                    แจ้งขอแก้ไขบริการเสริม/ออเดอร์
+                                </button>
+                            )
+                        )}
                     </div>
+                    {pendingOrderRequest && (
+                        <div className="m-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-800">
+                            <div className="flex items-center gap-1.5 font-bold">
+                                <span>คำขอแก้ไขที่ส่งถึงแอดมิน:</span>
+                                {pendingOrderRequest.itemName && <span className="font-normal text-blue-700">({pendingOrderRequest.itemName})</span>}
+                            </div>
+                            <p className="mt-1 font-semibold text-blue-900">{pendingOrderRequest.details}</p>
+                            {pendingOrderRequest.reason && (
+                                <p className="mt-0.5 text-blue-600">เหตุผล: {pendingOrderRequest.reason}</p>
+                            )}
+                        </div>
+                    )}
                     <div className="divide-y divide-slate-100">
                         {order.items.map((item, idx) => {
                             const fallbackItemStatus =
@@ -1428,6 +1613,120 @@ export default function OrderDetailPage() {
                                 {canceling ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Order Edit Request Modal (Add-ons / Items) */}
+            {isOrderEditModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+                    <div className="bg-white w-full max-w-md rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-base">แจ้งขอแก้ไขบริการเสริม / ออเดอร์</h3>
+                                <p className="text-xs text-slate-500 mt-0.5">คำสั่งซื้อ {order.orderNo || order.id.slice(0, 8)}</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (submittingOrderRequest) return;
+                                    setIsOrderEditModalOpen(false);
+                                    setOrderRequestError("");
+                                }}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                            >
+                                <XCircle size={20} />
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-3 text-xs text-blue-800 leading-relaxed">
+                            💡 ลูกค้าไม่สามารถแก้ไขรายการได้ด้วยตนเอง กรุณาระบุรายละเอียดบริการเสริมหรือรายการที่ต้องการปรับปรุง เพื่อให้เจ้าหน้าที่ตรวจสอบและดำเนินการแก้ไขให้ค่ะ
+                        </div>
+
+                        {orderRequestError && (
+                            <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
+                                {orderRequestError}
+                            </div>
+                        )}
+                        {orderRequestSuccess && (
+                            <div className="p-3 bg-green-50 text-green-700 text-xs rounded-xl border border-green-200">
+                                {orderRequestSuccess}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleOrderEditSubmit} className="space-y-3.5">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">เลือกสินค้าที่ต้องการแก้ไข</label>
+                                <select
+                                    value={editItemName}
+                                    onChange={(e) => setEditItemName(e.target.value)}
+                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                >
+                                    <option value="">ทั้งคำสั่งซื้อ / ทั่วไป</option>
+                                    {order.items.map((it, i) => (
+                                        <option key={`${it.productId}-${i}`} value={it.productName}>
+                                            {it.productName} {it.variantInfo ? `(${it.variantInfo})` : ""}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                    รายละเอียดบริการเสริม / สิ่งที่ต้องการแก้ไข <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={editDetails}
+                                    onChange={(e) => {
+                                        setEditDetails(e.target.value);
+                                        setOrderRequestError("");
+                                    }}
+                                    placeholder="เช่น ขอเปลี่ยนบริการเสริมสลักชื่อเป็น 'Antigravity' / ขอเพิ่มบริการเสริมห่อของขวัญ"
+                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                    เหตุผลในการขอแก้ไข <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    required
+                                    rows={2}
+                                    value={editReason}
+                                    onChange={(e) => {
+                                        setEditReason(e.target.value);
+                                        setOrderRequestError("");
+                                    }}
+                                    placeholder="เช่น พิมพ์ข้อความสลักชื่อผิด, ต้องการสั่งทำเพิ่มเติม"
+                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                            </div>
+
+                            <div className="flex gap-2.5 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (submittingOrderRequest) return;
+                                        setIsOrderEditModalOpen(false);
+                                        setOrderRequestError("");
+                                    }}
+                                    disabled={submittingOrderRequest}
+                                    className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingOrderRequest || !editDetails.trim()}
+                                    className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                >
+                                    {submittingOrderRequest && <Loader2 size={13} className="animate-spin" />}
+                                    ส่งคำขอแก้ไข
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
