@@ -96,6 +96,27 @@ const calculateItemsTotal = (items: OrderItemsDraft) => {
     return items.reduce((sum, item) => sum + toNumber(item.finalPrice ?? item.price) * toNumber(item.quantity), 0);
 };
 
+function cleanForFirestore<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+        return null as unknown as T;
+    }
+    if (Array.isArray(obj)) {
+        return obj
+            .filter(item => item !== undefined)
+            .map(item => cleanForFirestore(item)) as unknown as T;
+    }
+    if (typeof obj === "object" && !(obj instanceof Date)) {
+        const cleaned: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (value !== undefined) {
+                cleaned[key] = cleanForFirestore(value);
+            }
+        }
+        return cleaned as T;
+    }
+    return obj;
+}
+
 export default function AdminOrderDetailPage() {
     const params = useParams<{ id: string }>();
     const orderId = params.id;
@@ -372,25 +393,34 @@ export default function AdminOrderDetailPage() {
     const updateItemStatus = async (itemIndex: number, status: OrderItemStatus) => {
         if (!order || updatingItemKey) return;
         const itemKey = `${order.id}-${itemIndex}`;
-        const nextItems = order.items.map((item, index) => (
-            index === itemIndex
-                ? applyPickupOption({
-                    ...item,
-                    status,
-                    bundleItems: item.bundleItems?.map((bundleItem) => applyPickupOption({
-                        ...bundleItem,
-                        status
-                    }, status, pickupOptions))
-                }, status, pickupOptions)
-                : item
-        ));
+        const nextItems = order.items.map((item, index) => {
+            if (index !== itemIndex) return item;
+            const updatedItem: any = {
+                ...item,
+                status
+            };
+            if (item.bundleItems && Array.isArray(item.bundleItems)) {
+                updatedItem.bundleItems = item.bundleItems.map((bundleItem) => applyPickupOption({
+                    ...bundleItem,
+                    status
+                }, status, pickupOptions));
+            } else {
+                delete updatedItem.bundleItems;
+            }
+            return applyPickupOption(updatedItem, status, pickupOptions);
+        });
+
+        const safeItems = cleanForFirestore(nextItems);
 
         try {
             setUpdatingItemKey(itemKey);
             await updateDoc(doc(db, "orders", order.id), {
-                items: nextItems,
+                items: safeItems,
                 updatedAt: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Error updating item status:", error);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error?.message || error}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -401,20 +431,28 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}-${bundleItemIndex}`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            return {
-                ...item,
-                bundleItems: item.bundleItems?.map((bundleItem, index) => (
-                    index === bundleItemIndex ? applyPickupOption({ ...bundleItem, status }, status, pickupOptions) : bundleItem
-                ))
-            };
+            const updatedItem: any = { ...item };
+            if (item.bundleItems && Array.isArray(item.bundleItems)) {
+                updatedItem.bundleItems = item.bundleItems.map((bundleItem, idx) => (
+                    idx === bundleItemIndex ? applyPickupOption({ ...bundleItem, status }, status, pickupOptions) : bundleItem
+                ));
+            } else {
+                delete updatedItem.bundleItems;
+            }
+            return updatedItem;
         });
+
+        const safeItems = cleanForFirestore(nextItems);
 
         try {
             setUpdatingItemKey(itemKey);
             await updateDoc(doc(db, "orders", order.id), {
-                items: nextItems,
+                items: safeItems,
                 updatedAt: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Error updating bundle item status:", error);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error?.message || error}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -426,31 +464,40 @@ export default function AdminOrderDetailPage() {
         if (!pickupOption) return;
 
         const itemKey = `${order.id}-${itemIndex}-pickup`;
-        const nextItems = order.items.map((item, index) => (
-            index === itemIndex
-                ? {
-                    ...item,
+        const nextItems = order.items.map((item, index) => {
+            if (index !== itemIndex) return item;
+            const updatedItem: any = {
+                ...item,
+                status: "ready" as OrderItemStatus,
+                pickupOptionId: pickupOption.id,
+                pickupLabel: pickupOption.label,
+                pickupDetail: pickupOption.detail || null
+            };
+            if (item.bundleItems && Array.isArray(item.bundleItems)) {
+                updatedItem.bundleItems = item.bundleItems.map((bundleItem) => ({
+                    ...bundleItem,
                     status: "ready" as OrderItemStatus,
                     pickupOptionId: pickupOption.id,
                     pickupLabel: pickupOption.label,
-                    pickupDetail: pickupOption.detail || null,
-                    bundleItems: item.bundleItems?.map((bundleItem) => ({
-                        ...bundleItem,
-                        status: "ready" as OrderItemStatus,
-                        pickupOptionId: pickupOption.id,
-                        pickupLabel: pickupOption.label,
-                        pickupDetail: pickupOption.detail || null
-                    }))
-                }
-                : item
-        ));
+                    pickupDetail: pickupOption.detail || null
+                }));
+            } else {
+                delete updatedItem.bundleItems;
+            }
+            return updatedItem;
+        });
+
+        const safeItems = cleanForFirestore(nextItems);
 
         try {
             setUpdatingItemKey(itemKey);
             await updateDoc(doc(db, "orders", order.id), {
-                items: nextItems,
+                items: safeItems,
                 updatedAt: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Error updating item pickup:", error);
+            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -464,10 +511,10 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}-${bundleItemIndex}-pickup`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            return {
-                ...item,
-                bundleItems: item.bundleItems?.map((bundleItem, index) => (
-                    index === bundleItemIndex
+            const updatedItem: any = { ...item };
+            if (item.bundleItems && Array.isArray(item.bundleItems)) {
+                updatedItem.bundleItems = item.bundleItems.map((bundleItem, bIdx) => (
+                    bIdx === bundleItemIndex
                         ? {
                             ...bundleItem,
                             status: "ready" as OrderItemStatus,
@@ -476,16 +523,24 @@ export default function AdminOrderDetailPage() {
                             pickupDetail: pickupOption.detail || null
                         }
                         : bundleItem
-                ))
-            };
+                ));
+            } else {
+                delete updatedItem.bundleItems;
+            }
+            return updatedItem;
         });
+
+        const safeItems = cleanForFirestore(nextItems);
 
         try {
             setUpdatingItemKey(itemKey);
             await updateDoc(doc(db, "orders", order.id), {
-                items: nextItems,
+                items: safeItems,
                 updatedAt: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Error updating bundle pickup:", error);
+            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -623,18 +678,19 @@ export default function AdminOrderDetailPage() {
         });
 
         const totalAmount = calculateItemsTotal(normalizedItems) + toNumber(order.deliveryFee);
+        const safeItems = cleanForFirestore(normalizedItems);
 
         try {
             setSavingItems(true);
             await updateDoc(doc(db, "orders", order.id), {
-                items: normalizedItems,
+                items: safeItems,
                 totalAmount,
                 updatedAt: serverTimestamp()
             });
             setIsEditingItems(false);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to save items:", error);
-            alert("บันทึกรายการสินค้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+            alert(`บันทึกรายการสินค้าไม่สำเร็จ: ${error?.message || error}`);
         } finally {
             setSavingItems(false);
         }
@@ -683,12 +739,17 @@ export default function AdminOrderDetailPage() {
             };
         });
 
+        const safeItems = cleanForFirestore(nextItems);
+
         try {
             setSavingIssueReplyKey(`${order.id}-${draftKey}`);
             await updateDoc(doc(db, "orders", order.id), {
-                items: nextItems,
+                items: safeItems,
                 updatedAt: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Error saving issue reply:", error);
+            alert(`บันทึกคำตอบกลับไม่สำเร็จ: ${error?.message || error}`);
         } finally {
             setSavingIssueReplyKey(null);
         }
