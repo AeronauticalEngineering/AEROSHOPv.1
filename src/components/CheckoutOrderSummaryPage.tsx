@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase";
 import { StoreSettings } from "@/types/store";
 import useLiff from "@/hooks/useLiff";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
+import { buildOrderStatusFlex } from "@/lib/lineNotify";
 import CancelOrderModal from "@/components/CancelOrderModal";
 import { formatOrderId } from "@/lib/orderId";
 
@@ -169,13 +170,13 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
         }
     }, []);
 
-    const notifyOrderCreated = useCallback(async () => {
+    const notifyOrderCreated = useCallback(async (clientSentBill = false) => {
         if (!orderId) return { customerNotified: false };
         try {
             const res = await fetch("/api/orders/notify-created", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ orderId })
+                body: JSON.stringify({ orderId, clientSentBill })
             });
             if (!res.ok) return { customerNotified: false };
             const data = await res.json().catch(() => ({}));
@@ -219,14 +220,33 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
     const handleSendBill = useCallback(async () => {
         if (!liff || !liff.isInClient() || !orderData || sentBill) return false;
 
-        try {
-            await liff.sendMessages([
-                buildReceiptFlexMessage({
+        const isOrderPaid =
+            orderData.paymentStatus === "paid" ||
+            orderData.paymentStatus === "verified" ||
+            orderData.status === "paid" ||
+            orderData.status === "completed";
+
+        const receiptFlex = buildReceiptFlexMessage({
+            orderId: orderId || "",
+            liffId: liffId || "",
+            orderData
+        });
+
+        // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลยืนยันชำระเงินตามมา
+        const messages: Parameters<typeof liff.sendMessages>[0] = [receiptFlex];
+        if (isOrderPaid) {
+            messages.push(
+                buildOrderStatusFlex({
+                    status: "paid",
                     orderId: orderId || "",
-                    liffId: liffId || "",
-                    orderData
+                    amount: orderData.totalAmount,
+                    liffId: liffId || ""
                 })
-            ]);
+            );
+        }
+
+        try {
+            await liff.sendMessages(messages);
             setSentBill(true);
             return true;
         } catch (error) {
@@ -252,29 +272,30 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
                 return;
             }
 
+            // 1. Send customer bill first if running inside LINE LIFF client
+            let sentViaLiff = false;
+            const messageSessionKey = `checkout-customer-sendmessage-v2:${orderId}`;
+            const messageLocalKey = `checkout-customer-sendmessage-v2:${orderId}`;
+            if (!getSessionFlag(messageSessionKey) && !getLocalFlag(messageLocalKey)) {
+                if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {
+                    sentViaLiff = await handleSendBill();
+                    if (sentViaLiff) {
+                        setSessionFlag(messageSessionKey);
+                        setLocalFlag(messageLocalKey);
+                    }
+                }
+            } else {
+                setSentBill(true);
+                sentViaLiff = true;
+            }
+
+            // 2. Notify Admin via server (and tell server client already sent bill)
             const adminSessionKey = `order-created-notified:${orderId}`;
             const adminLocalKey = `order-created-notified:${orderId}`;
             if (!getSessionFlag(adminSessionKey) && !getLocalFlag(adminLocalKey)) {
                 setSessionFlag(adminSessionKey);
                 setLocalFlag(adminLocalKey);
-                await notifyOrderCreated();
-            }
-
-            const messageSessionKey = `checkout-customer-sendmessage-v2:${orderId}`;
-            const messageLocalKey = `checkout-customer-sendmessage-v2:${orderId}`;
-            if (getSessionFlag(messageSessionKey) || getLocalFlag(messageLocalKey)) {
-                setSentBill(true);
-                return;
-            }
-
-            if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {
-                const sent = await handleSendBill();
-                if (sent) {
-                    setSessionFlag(messageSessionKey);
-                    setLocalFlag(messageLocalKey);
-                }
-            } else {
-                console.info("Skipping customer sendMessage because page is not running inside LINE LIFF client.");
+                await notifyOrderCreated(sentViaLiff);
             }
 
         })();

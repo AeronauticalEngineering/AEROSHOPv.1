@@ -12,6 +12,7 @@ import { addDoc, collection, serverTimestamp, doc, setDoc, getDoc, updateDoc, ar
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
+import { buildOrderStatusFlex } from "@/lib/lineNotify";
 import { ShippingOption, StoreSettings } from "@/types/store";
 
 interface Promotion {
@@ -693,10 +694,42 @@ export default function CheckoutPaymentPage() {
                 }
             }
 
+            // 1. Send receipt bill into customer chat first via LIFF if available (1. บิลออเดอร์ก่อน -> 2. บิลใบเสร็จตาม)
+            let sentViaLiff = false;
+            if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {
+                try {
+                    const orderReceipt = buildReceiptFlexMessage({
+                        orderId,
+                        liffId: liffId || "",
+                        orderData: {
+                            ...baseOrderData,
+                            orderNo: orderId,
+                            id: orderId
+                        }
+                    });
+                    const messages: Parameters<typeof liff.sendMessages>[0] = [orderReceipt];
+                    if (slipVerifyResult?.verified) {
+                        messages.push(
+                            buildOrderStatusFlex({
+                                status: "paid",
+                                orderId,
+                                amount: baseOrderData.totalAmount,
+                                liffId: liffId || ""
+                            })
+                        );
+                    }
+                    await liff.sendMessages(messages);
+                    sentViaLiff = true;
+                } catch (sendError) {
+                    console.error("Error sending checkout receipt message:", sendError);
+                }
+            }
+
+            // 2. Notify Admin via server, informing server if client already sent bill to prevent duplicate
             await fetch("/api/orders/notify-created", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ orderId })
+                body: JSON.stringify({ orderId, clientSentBill: sentViaLiff })
             }).catch(() => undefined);
 
             orderCreatedRef.current = true;
@@ -713,26 +746,9 @@ export default function CheckoutPaymentPage() {
                 alert("สร้างออเดอร์แล้ว สถานะรอตรวจสอบการชำระเงิน");
             }
 
-            if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {
-                try {
-                    await liff.sendMessages([
-                        buildReceiptFlexMessage({
-                            orderId,
-                            liffId: liffId || "",
-                            orderData: {
-                                ...baseOrderData,
-                                orderNo: orderId,
-                                id: orderId
-                            }
-                        })
-                    ]);
-                } catch (sendError) {
-                    console.error("Error sending checkout receipt message:", sendError);
-                }
-                if (typeof liff.closeWindow === "function") {
-                    liff.closeWindow();
-                    return;
-                }
+            if (sentViaLiff && liff && typeof liff.closeWindow === "function") {
+                liff.closeWindow();
+                return;
             }
 
             router.replace(`/myorder/${orderId}`);

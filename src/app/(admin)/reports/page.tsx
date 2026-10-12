@@ -192,6 +192,20 @@ const ORDER_COLUMNS = [
     { key: "totalDiscount", label: "ส่วนลดรวม (Discount)", getValue: (order: ReportOrder) => Number(order.totalDiscount || 0) },
     { key: "deliveryFee", label: "ค่าจัดส่ง (Delivery)", getValue: (order: ReportOrder) => Number(order.deliveryFee || 0) },
     { key: "totalAmount", label: "ยอดรวมสุทธิ (Total)", getValue: (order: ReportOrder) => Number(order.totalAmount || 0) },
+    {
+        key: "selectedProductQty",
+        label: "จำนวนสินค้านี้ในออเดอร์ (Selected Item Qty)",
+        getValue: (order: ReportOrder, _slipsMap?: Map<string, SlipDoc>, selectedKey?: string | null) => {
+            if (!selectedKey) return "-";
+            const items = (order.items || []).filter((item) => {
+                const variantInfo = typeof item.variantInfo === "string" ? item.variantInfo : "";
+                const addOns = formatItemAddOns(item);
+                const key = `${item.productId || item.productName}|${variantInfo}|${addOns}`;
+                return key === selectedKey;
+            });
+            return items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        }
+    },
 ];
 
 export default function AdminReportsPage() {
@@ -204,6 +218,7 @@ export default function AdminReportsPage() {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [slips, setSlips] = useState<SlipDoc[]>([]);
     const [selectedProductKey, setSelectedProductKey] = useState<string | null>(null);
+    const [exportScope, setExportScope] = useState<'all' | 'selected'>('all');
 
     useEffect(() => {
         const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -337,9 +352,16 @@ export default function AdminReportsPage() {
             return;
         }
 
-        downloadCsv(`sales-orders-${startDate}-to-${endDate}.csv`, [
+        const isSelected = exportScope === 'selected' && Boolean(selectedProduct);
+        const ordersToExport = isSelected ? displayedOrders : filteredOrders;
+        const safeName = (selectedProduct?.productName || "product").replace(/[^a-zA-Z0-9ก-๙_-]/g, "_");
+        const filename = isSelected
+            ? `orders-${safeName}-${startDate}-to-${endDate}.csv`
+            : `sales-orders-${startDate}-to-${endDate}.csv`;
+
+        downloadCsv(filename, [
             activeColumns.map(c => c.label),
-            ...filteredOrders.map((order) => activeColumns.map(c => c.getValue(order, slipsMap)))
+            ...ordersToExport.map((order) => activeColumns.map(c => c.getValue(order, slipsMap, selectedProductKey)))
         ]);
         setIsExportModalOpen(false);
     };
@@ -369,7 +391,10 @@ export default function AdminReportsPage() {
                 <div className="flex items-center gap-1.5">
                     <button
                         type="button"
-                        onClick={() => setIsExportModalOpen(true)}
+                        onClick={() => {
+                            setExportScope(selectedProduct ? 'selected' : 'all');
+                            setIsExportModalOpen(true);
+                        }}
                         disabled={filteredOrders.length === 0}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 cursor-pointer shadow-2xs transition-colors"
                     >
@@ -583,14 +608,32 @@ export default function AdminReportsPage() {
                             )}
                         </div>
                         {selectedProduct && (
-                            <button
-                                type="button"
-                                onClick={() => setSelectedProductKey(null)}
-                                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
-                            >
-                                <X size={12} />
-                                <span>แสดงทั้งหมด</span>
-                            </button>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setExportScope('selected');
+                                        if (!selectedColumns.includes('selectedProductQty')) {
+                                            setSelectedColumns(prev => [...prev, 'selectedProductQty']);
+                                        }
+                                        setIsExportModalOpen(true);
+                                    }}
+                                    disabled={displayedOrders.length === 0}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 transition-colors cursor-pointer shadow-2xs"
+                                    title="Export เฉพาะออเดอร์ที่มีสินค้านี้"
+                                >
+                                    <Download size={11} />
+                                    <span>Export ออเดอร์สินค้านี้ ({displayedOrders.length})</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedProductKey(null)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                                >
+                                    <X size={11} />
+                                    <span>แสดงทั้งหมด</span>
+                                </button>
+                            </div>
                         )}
                     </div>
                     <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
@@ -683,6 +726,51 @@ export default function AdminReportsPage() {
 
                         {/* Modal Body */}
                         <div className="p-4 overflow-y-auto space-y-3">
+                            {/* Scope Selector if a product is selected */}
+                            {selectedProduct && (
+                                <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5">
+                                    <span className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                        ขอบเขตออเดอร์ที่ต้องการ Export
+                                    </span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setExportScope('selected')}
+                                            className={`flex items-center justify-between p-2 rounded-lg text-xs font-medium border text-left transition cursor-pointer ${
+                                                exportScope === 'selected'
+                                                    ? 'bg-white border-slate-900 text-slate-900 shadow-2xs'
+                                                    : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                                            }`}
+                                        >
+                                            <div className="min-w-0 pr-2">
+                                                <span className="font-semibold block truncate">เฉพาะสินค้านี้: {selectedProduct.productName}</span>
+                                                <span className="text-[10px] text-slate-400">ออเดอร์ที่มีสินค้านี้</span>
+                                            </div>
+                                            <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-50 text-blue-700 shrink-0">
+                                                {displayedOrders.length} ออเดอร์
+                                            </span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setExportScope('all')}
+                                            className={`flex items-center justify-between p-2 rounded-lg text-xs font-medium border text-left transition cursor-pointer ${
+                                                exportScope === 'all'
+                                                    ? 'bg-white border-slate-900 text-slate-900 shadow-2xs'
+                                                    : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                                            }`}
+                                        >
+                                            <div>
+                                                <span className="font-semibold block">ออเดอร์ทั้งหมด</span>
+                                                <span className="text-[10px] text-slate-400">ทุกสินค้าตามตัวกรอง</span>
+                                            </div>
+                                            <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-700 shrink-0">
+                                                {filteredOrders.length} ออเดอร์
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex items-center gap-2 text-xs">
                                 <button
                                     type="button"
@@ -750,7 +838,7 @@ export default function AdminReportsPage() {
                                 className="px-3.5 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
                             >
                                 <Download size={13} />
-                                <span>ดาวน์โหลด CSV ({selectedColumns.length} คอลัมน์)</span>
+                                <span>ดาวน์โหลด CSV (${exportScope === 'selected' && selectedProduct ? displayedOrders.length : filteredOrders.length} ออเดอร์)</span>
                             </button>
                         </div>
                     </div>

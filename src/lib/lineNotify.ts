@@ -308,10 +308,12 @@ export function buildAdminIssueFlex(params: {
 export async function sendLineMessage(params: {
   token: string;
   targets: string[];
-  message: LineMessage;
+  message?: LineMessage;
+  messages?: LineMessage[];
 }) {
-  const { token, targets, message } = params;
-  if (!token || targets.length === 0) return;
+  const { token, targets, message, messages } = params;
+  const payloadMessages = messages && messages.length > 0 ? messages : (message ? [message] : []);
+  if (!token || targets.length === 0 || payloadMessages.length === 0) return;
 
   const normalizedTargets = targets
     .flatMap((raw) => String(raw || "").split(/[,\s]+/g))
@@ -357,7 +359,7 @@ export async function sendLineMessage(params: {
   const pushToOne = async (target: string) => {
     const resp = await postJson("https://api.line.me/v2/bot/message/push", {
       to: target,
-      messages: [message]
+      messages: payloadMessages
     });
     if (resp.ok) {
       sentCount += 1;
@@ -379,7 +381,7 @@ export async function sendLineMessage(params: {
   } else if (userTargets.length > 1) {
     const resp = await postJson("https://api.line.me/v2/bot/message/multicast", {
       to: userTargets,
-      messages: [message]
+      messages: payloadMessages
     });
     if (resp.ok) {
       sentCount += userTargets.length;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
-import { buildAdminNewOrderFlex, sendLineMessage } from "@/lib/lineNotify";
+import { buildAdminNewOrderFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
 
 export const runtime = "nodejs";
@@ -31,6 +31,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const orderId = body?.orderId as string | undefined;
+    const clientSentBill = Boolean(body?.clientSentBill);
     if (!orderId) {
       return NextResponse.json({ error: "Invalid orderId" }, { status: 400 });
     }
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
       adminNotified = true;
     }
 
-    if (notifyEnabled(settings?.lineNotifyCustomerOrderSuccess) && liffId) {
+    if (notifyEnabled(settings?.lineNotifyCustomerOrderSuccess) && liffId && !clientSentBill) {
       const customerLineId = await resolveCustomerLineId(db, order);
       if (customerLineId) {
         const customerFlex = buildReceiptFlexMessage({
@@ -102,7 +103,27 @@ export async function POST(req: Request) {
           liffId,
           orderData: order
         });
-        await sendLineMessage({ token, targets: [customerLineId], message: customerFlex });
+
+        const isOrderPaid =
+          order.paymentStatus === "paid" ||
+          order.paymentStatus === "verified" ||
+          order.status === "paid" ||
+          order.status === "completed";
+
+        // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลใบเสร็จตาม
+        const customerMessages = [customerFlex];
+        if (isOrderPaid) {
+          customerMessages.push(
+            buildOrderStatusFlex({
+              status: "paid",
+              orderId,
+              amount: Number(order.totalAmount) || 0,
+              liffId
+            })
+          );
+        }
+
+        await sendLineMessage({ token, targets: [customerLineId], messages: customerMessages });
         customerNotified = true;
       }
     }

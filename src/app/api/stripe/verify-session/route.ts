@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
 import { deductOrderStock } from "@/lib/stockManagement";
-import { buildAdminPaymentFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
+import { buildAdminPaymentFlex, sendLineMessage } from "@/lib/lineNotify";
 
 export const runtime = "nodejs";
 
@@ -17,8 +17,8 @@ async function notifyPaymentVerified(
   try {
     const token = typeof settings?.lineChannelAccessToken === "string" ? settings.lineChannelAccessToken : "";
     if (!token) return;
-    const db = admin.firestore();
 
+    // 1. Notify Admin that customer paid via Stripe
     const adminTargets = [settings?.lineAdminUserId, settings?.lineAdminGroupId].filter(Boolean).map(String);
     if (notifyEnabled(settings?.lineNotifyAdminPayment) && adminTargets.length > 0) {
       const adminFlex = buildAdminPaymentFlex({
@@ -30,26 +30,9 @@ async function notifyPaymentVerified(
       await sendLineMessage({ token, targets: adminTargets, message: adminFlex });
     }
 
-    if (!notifyEnabled(settings?.lineNotifyCustomerPaymentConfirmed)) return;
-    let customerLineId = typeof orderData?.lineId === "string" ? orderData.lineId : null;
-    if (!customerLineId && orderData?.customerId) {
-      const customerSnap = await db.doc(`customers/${String(orderData.customerId)}`).get();
-      if (customerSnap.exists) {
-        const customer = customerSnap.data() || {};
-        customerLineId = typeof customer.lineId === "string" ? customer.lineId : null;
-      }
-    }
-    if (!customerLineId) return;
-
-    const liffId = process.env.NEXT_PUBLIC_LIFF_ID || null;
-    const customerFlex = buildOrderStatusFlex({
-      status: "paid",
-      orderId,
-      amount,
-      trackingNumber: typeof orderData?.trackingNumber === "string" ? orderData.trackingNumber : null,
-      liffId
-    });
-    await sendLineMessage({ token, targets: [customerLineId], message: customerFlex });
+    // Note: We do NOT push a premature "ยืนยันการชำระเงิน" message to the customer here.
+    // The customer receives the official complete Receipt Bill (buildReceiptFlexMessage)
+    // with items, amount, and green "รับออเดอร์แล้ว/ชำระแล้ว" status from the checkout summary page.
   } catch (err) {
     console.error("LINE notify failed for Stripe payment:", err);
   }
