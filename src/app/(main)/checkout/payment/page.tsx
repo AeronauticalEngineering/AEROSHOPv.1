@@ -707,7 +707,7 @@ export default function CheckoutPaymentPage() {
                             id: orderId
                         }
                     });
-                    const messages: Parameters<typeof liff.sendMessages>[0] = [orderReceipt];
+                    const messages: Array<Record<string, unknown>> = [orderReceipt as unknown as Record<string, unknown>];
                     if (slipVerifyResult?.verified) {
                         messages.push(
                             buildOrderStatusFlex({
@@ -715,10 +715,10 @@ export default function CheckoutPaymentPage() {
                                 orderId,
                                 amount: baseOrderData.totalAmount,
                                 liffId: liffId || ""
-                            })
+                            }) as Record<string, unknown>
                         );
                     }
-                    await liff.sendMessages(messages);
+                    await (liff.sendMessages as unknown as (msgs: Array<Record<string, unknown>>) => Promise<void>)(messages);
                     sentViaLiff = true;
                 } catch (sendError) {
                     console.error("Error sending checkout receipt message:", sendError);

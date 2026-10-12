@@ -233,7 +233,7 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
         });
 
         // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลยืนยันชำระเงินตามมา
-        const messages: Parameters<typeof liff.sendMessages>[0] = [receiptFlex];
+        const messages: Array<Record<string, unknown>> = [receiptFlex as unknown as Record<string, unknown>];
         if (isOrderPaid) {
             messages.push(
                 buildOrderStatusFlex({
@@ -241,12 +241,12 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
                     orderId: orderId || "",
                     amount: orderData.totalAmount,
                     liffId: liffId || ""
-                })
+                }) as Record<string, unknown>
             );
         }
 
         try {
-            await liff.sendMessages(messages);
+            await (liff.sendMessages as unknown as (msgs: Array<Record<string, unknown>>) => Promise<void>)(messages);
             setSentBill(true);
             return true;
         } catch (error) {

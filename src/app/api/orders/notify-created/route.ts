@@ -111,7 +111,7 @@ export async function POST(req: Request) {
           order.status === "completed";
 
         // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลใบเสร็จตาม
-        const customerMessages = [customerFlex];
+        const customerMessages: Record<string, unknown>[] = [customerFlex];
         if (isOrderPaid) {
           customerMessages.push(
             buildOrderStatusFlex({

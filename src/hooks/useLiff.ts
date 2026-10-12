@@ -49,7 +49,7 @@ const useLiff = (liffId: string | undefined, options?: UseLiffOptions): UseLiffR
                     logout: () => { },
                     closeWindow: () => { },
                     isInClient: () => false,
-                    sendMessages: async () => { },
+                    sendMessages: async (_messages?: unknown) => { },
                 };
 
                 setLiffObject(mockLiff);
