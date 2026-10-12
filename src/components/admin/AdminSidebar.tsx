@@ -20,7 +20,6 @@ import {
     Tags,
     Ticket,
     User,
-    UserCheck,
     UserCog,
     Users,
     X,
@@ -36,7 +35,6 @@ interface MenuItem {
     label: string;
     icon: React.ElementType;
     badge?: number | string | null;
-    badgeColor?: 'orange' | 'amber';
 }
 
 interface MenuGroup {
@@ -50,6 +48,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     const pathname = usePathname();
     const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
     const [pendingSlipsCount, setPendingSlipsCount] = useState(0);
+    const [pendingOrderRequestsCount, setPendingOrderRequestsCount] = useState(0);
     const navRef = useRef<HTMLElement | null>(null);
     const [scrollbar, setScrollbar] = useState({ top: 0, height: 100, visible: false });
 
@@ -86,7 +85,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     }, []);
 
     // Listen to pending order edit requests
-    const [pendingOrderRequestsCount, setPendingOrderRequestsCount] = useState(0);
     useEffect(() => {
         const fetchPendingCountFromApi = async () => {
             try {
@@ -138,21 +136,18 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     label: 'คำสั่งซื้อ',
                     icon: ShoppingBag,
                     badge: pendingOrdersCount > 0 ? (pendingOrdersCount > 99 ? '99+' : pendingOrdersCount) : null,
-                    badgeColor: 'orange',
                 },
                 {
                     href: '/order-requests',
                     label: 'คำขอแก้ไขออเดอร์',
                     icon: Sparkles,
                     badge: pendingOrderRequestsCount > 0 ? (pendingOrderRequestsCount > 99 ? '99+' : pendingOrderRequestsCount) : null,
-                    badgeColor: 'amber',
                 },
                 {
                     href: '/slip-checks',
                     label: 'ตรวจสลิปโอนเงิน',
                     icon: Receipt,
                     badge: pendingSlipsCount > 0 ? (pendingSlipsCount > 99 ? '99+' : pendingSlipsCount) : null,
-                    badgeColor: 'amber',
                 },
                 { href: '/products', label: 'จัดการสินค้า', icon: Package },
                 { href: '/categories', label: 'หมวดหมู่สินค้า', icon: Tags },
@@ -212,37 +207,39 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             {/* Mobile Overlay */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
+                    className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 md:hidden transition-opacity duration-200"
                     onClick={onClose}
                     aria-hidden="true"
                 />
             )}
 
-            <aside className={`fixed inset-y-0 left-0 bg-[radial-gradient(circle_at_88%_8%,rgba(249,115,22,0.28),transparent_14rem),linear-gradient(145deg,#06172c_0%,#0a2a52_55%,#0d3d6e_100%)] border-r border-white/10 z-50 w-72 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:sticky md:top-0 md:h-screen md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col shadow-2xl md:shadow-none`}>
-                {/* Header: User Profile & Actions */}
-                <div className="p-3.5 border-b border-white/10 bg-white/[0.02]">
-                    <div className="flex items-center justify-between gap-2.5">
+            {/* Sidebar Container: Clean, Calm Dark Navy-Slate (Zero-Noise) */}
+            <aside className={`fixed inset-y-0 left-0 bg-[#091424] border-r border-slate-800/80 z-50 w-64 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:sticky md:top-0 md:h-screen md:translate-x-0 transition-transform duration-250 ease-out flex flex-col shadow-xl md:shadow-none select-none`}>
+                
+                {/* Header: Compact User Profile Card */}
+                <div className="p-3 border-b border-slate-800/80 bg-slate-900/40">
+                    <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-amber-600 text-white font-bold text-base flex items-center justify-center shadow-md shadow-orange-500/25 border border-white/20">
+                            <div className="relative shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 text-slate-100 font-semibold text-xs flex items-center justify-center border border-slate-700/80 shadow-2xs">
                                 {userInitial}
                                 <span
-                                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#092548] rounded-full"
+                                    className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border-[1.5px] border-[#091424] rounded-full"
                                     title="ออนไลน์"
                                 />
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-bold text-white leading-tight">
+                                <p className="truncate text-xs font-semibold text-slate-100 leading-tight">
                                     {displayName}
                                 </p>
                                 <div className="mt-0.5 flex items-center">
                                     {userRole === 'admin' ? (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-400/30 px-1.5 py-0.5 rounded">
-                                            <Shield size={10} />
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300/90 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                                            <Shield size={9} />
                                             ผู้ดูแลระบบ
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-500/20 border border-sky-400/30 px-1.5 py-0.5 rounded">
-                                            <User size={10} />
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-300/90 bg-sky-500/10 px-1.5 py-0.2 rounded border border-sky-500/20">
+                                            <User size={9} />
                                             พนักงาน
                                         </span>
                                     )}
@@ -253,40 +250,40 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                         <div className="flex items-center gap-0.5 shrink-0">
                             <button
                                 onClick={() => logout()}
-                                className="rounded-lg p-2 text-white/60 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                                className="rounded-md p-1.5 text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer"
                                 title="ออกจากระบบ"
                                 aria-label="ออกจากระบบ"
                             >
-                                <LogOut size={18} />
+                                <LogOut size={15} />
                             </button>
 
                             {/* Mobile Close Button */}
                             <button
                                 onClick={onClose}
-                                className="rounded-lg p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white md:hidden"
+                                className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-white/5 transition-colors md:hidden cursor-pointer"
                                 aria-label="ปิดเมนู"
                             >
-                                <X size={18} />
+                                <X size={15} />
                             </button>
                         </div>
                     </div>
                 </div>
 
-                {/* Navigation */}
+                {/* Navigation Menu List */}
                 <div className="relative flex-1 min-h-0">
                     <nav
                         ref={navRef}
                         onScroll={updateScrollbar}
-                        className="admin-sidebar-scroll h-full px-3.5 py-4 space-y-4 overflow-y-auto"
+                        className="admin-sidebar-scroll h-full px-2.5 py-3 space-y-3.5 overflow-y-auto"
                     >
                         {menuGroups.map((group) => (
-                            <div key={group.id} className="space-y-1">
-                                {/* Group Title with subtle divider */}
-                                <div className="px-3 pt-1 pb-1 flex items-center gap-2">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                            <div key={group.id} className="space-y-0.5">
+                                {/* Group Title with clean subtle divider */}
+                                <div className="px-2.5 pt-1.5 pb-1 flex items-center gap-2">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400/70">
                                         {group.title}
                                     </span>
-                                    <div className="h-px flex-1 bg-white/[0.08]" />
+                                    <div className="h-px flex-1 bg-white/[0.05]" />
                                 </div>
 
                                 {/* Menu Items */}
@@ -300,35 +297,39 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                                                 key={item.href}
                                                 href={item.href}
                                                 onClick={onClose}
-                                                className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200 ${isActive
-                                                    ? 'bg-white text-[#0a2a52] font-semibold shadow-md shadow-black/20 ring-1 ring-white/20'
-                                                    : 'text-slate-300 hover:bg-white/[0.09] hover:text-white hover:translate-x-0.5'
-                                                    }`}
+                                                className={`group flex items-center justify-between gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
+                                                    isActive
+                                                        ? 'bg-white/10 text-white font-semibold border border-white/10 shadow-2xs'
+                                                        : 'text-slate-300/85 hover:bg-white/[0.05] hover:text-white'
+                                                }`}
                                             >
-                                                <div className="flex items-center gap-3 min-w-0">
+                                                <div className="flex items-center gap-2.5 min-w-0">
                                                     <Icon
-                                                        size={18}
-                                                        className={`shrink-0 transition-colors ${isActive
-                                                            ? 'text-orange-500'
-                                                            : 'text-white/60 group-hover:text-white'
-                                                            }`}
+                                                        size={15}
+                                                        className={`shrink-0 transition-colors ${
+                                                            isActive
+                                                                ? 'text-orange-400'
+                                                                : 'text-slate-400 group-hover:text-slate-200'
+                                                        }`}
                                                     />
                                                     <span className="truncate">{item.label}</span>
                                                 </div>
 
                                                 <div className="flex items-center gap-1.5 shrink-0">
+                                                    {/* Clean & Compact Badge (Zero-Noise) */}
                                                     {item.badge !== null && item.badge !== undefined && (
                                                         <span
-                                                            className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full text-white shadow-sm ${item.badgeColor === 'amber'
-                                                                ? 'bg-amber-500'
-                                                                : 'bg-orange-500'
-                                                                }`}
+                                                            className={`inline-flex items-center justify-center min-w-[19px] h-[17px] px-1 text-[10px] font-mono font-semibold rounded-full transition-all ${
+                                                                isActive
+                                                                    ? 'bg-orange-400/25 text-orange-300 ring-1 ring-orange-400/40'
+                                                                    : 'bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/25 group-hover:bg-orange-500/25'
+                                                            }`}
                                                         >
                                                             {item.badge}
                                                         </span>
                                                     )}
                                                     {isActive && (
-                                                        <ChevronRight size={14} className="text-orange-500 shrink-0" />
+                                                        <ChevronRight size={13} className="text-orange-400 shrink-0 opacity-80" />
                                                     )}
                                                 </div>
                                             </Link>
@@ -339,11 +340,11 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                         ))}
                     </nav>
 
-                    {/* Custom Scrollbar */}
+                    {/* Custom Minimal Scrollbar */}
                     {scrollbar.visible && (
-                        <div className="pointer-events-none absolute bottom-4 right-1 top-4 w-1 rounded-full bg-white/5">
+                        <div className="pointer-events-none absolute bottom-3 right-1 top-3 w-1 rounded-full bg-white/5">
                             <div
-                                className="absolute left-0 w-full rounded-full bg-white/30 transition-colors"
+                                className="absolute left-0 w-full rounded-full bg-white/20 transition-colors"
                                 style={{
                                     height: `${scrollbar.height}%`,
                                     top: `${scrollbar.top}%`,
@@ -356,5 +357,3 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </>
     );
 }
-
-

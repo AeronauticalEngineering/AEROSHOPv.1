@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -16,13 +16,17 @@ import {
     QrCode,
     Banknote,
     Globe,
-    Smartphone,
     RefreshCw,
     Database,
     Trash2,
     Plus,
     MapPin,
-    ExternalLink
+    ExternalLink,
+    Layers,
+    ShieldCheck,
+    UploadCloud,
+    CheckCircle2,
+    Building2
 } from "lucide-react";
 
 type FirestoreUsage = {
@@ -166,6 +170,18 @@ const lineAdminUsersFromSettings = (settings: StoreSettings): LineAdminUser[] =>
     return splitLineTargets(settings.lineAdminUserId).map((userId, index) => createLineAdminUser(userId, index));
 };
 
+type TabType = 'store' | 'payment' | 'shipping' | 'pickup' | 'line' | 'firestore' | 'indexes';
+
+const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
+    { id: 'store', label: 'ร้านค้า', icon: Store },
+    { id: 'payment', label: 'การชำระเงิน', icon: CreditCard },
+    { id: 'shipping', label: 'การจัดส่ง', icon: Truck },
+    { id: 'pickup', label: 'จุดรับสินค้า', icon: MapPin },
+    { id: 'line', label: 'แจ้งเตือน LINE', icon: Bell },
+    { id: 'firestore', label: 'ฐานข้อมูล & Storage', icon: Database },
+    { id: 'indexes', label: 'ดัชนี (Indexes)', icon: Layers },
+];
+
 export default function AdminSettingsPage() {
     const [settings, setSettings] = useState<Partial<StoreSettings>>({
         storeName: "",
@@ -211,7 +227,7 @@ export default function AdminSettingsPage() {
         lineNotifyCustomerShipped: true,
         lineNotifyCustomerCancelled: true,
     });
-    const [activeTab, setActiveTab] = useState<'store' | 'payment' | 'firestore' | 'indexes' | 'shipping' | 'pickup' | 'line'>('store');
+    const [activeTab, setActiveTab] = useState<TabType>('store');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -488,7 +504,7 @@ export default function AdminSettingsPage() {
             await deleteObject(testRef);
             setStorageRuleCheck({
                 status: "ok",
-                message: "เชื่อมต่อและ Rules อนุญาต upload/delete",
+                message: "เชื่อมต่อและ Rules อนุญาต Upload/Delete สมบูรณ์",
                 checkedAt: new Date().toISOString()
             });
             await fetchStorageUsage();
@@ -523,12 +539,12 @@ export default function AdminSettingsPage() {
             const deletedStorageCount = Number(data?.deletedStorageCount || 0);
             const failedStorageDeleteCount = Number(data?.failedStorageDeleteCount || 0);
             const storageNote = data?.storageDeleteSkipped
-                ? " ไม่ได้ลบไฟล์ Storage เพราะยังไม่ได้ตั้งค่า bucket"
+                ? " (ข้ามลบ Storage เนื่องจากยังไม่ระบุ Bucket)"
                 : failedStorageDeleteCount > 0
-                    ? ` ลบไฟล์ Storage ไม่สำเร็จ ${failedStorageDeleteCount.toLocaleString()} ไฟล์`
+                    ? ` (ลบไฟล์ไม่สำเร็จ ${failedStorageDeleteCount.toLocaleString()} ไฟล์)`
                     : "";
             setSlipCleanupMessage(
-                `ลบสลิปสำเร็จ ${deletedCount.toLocaleString()} รายการ, ลบไฟล์ Storage ${deletedStorageCount.toLocaleString()} ไฟล์${storageNote}`
+                `สำเร็จ: ลบสลิป ${deletedCount.toLocaleString()} รายการ, ลบไฟล์ Storage ${deletedStorageCount.toLocaleString()} ไฟล์${storageNote}`
             );
             await fetchFirestoreUsage();
             await fetchStorageUsage();
@@ -574,8 +590,8 @@ export default function AdminSettingsPage() {
         fetchIndexChecks();
     }, [activeTab, indexCheckLoading, indexCheckResults.length]);
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSave = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         setIsSaving(true);
         try {
             let logoUrl = settings.storeLogoUrl || "";
@@ -598,6 +614,7 @@ export default function AdminSettingsPage() {
                     sortOrder: index
                 }))
                 .filter(option => option.name);
+
             const normalizedPickupOptions = (settings.pickupOptions || [])
                 .map((option, index) => ({
                     id: option.id || Math.random().toString(36).slice(2, 10),
@@ -607,6 +624,7 @@ export default function AdminSettingsPage() {
                     sortOrder: index
                 }))
                 .filter(option => option.label);
+
             const normalizedLineAdminUsers = (settings.lineAdminUsers || [])
                 .map((user, index) => ({
                     id: user.id || Math.random().toString(36).slice(2, 10),
@@ -614,7 +632,9 @@ export default function AdminSettingsPage() {
                     userId: (user.userId || "").trim()
                 }))
                 .filter(user => user.userId);
+
             const lineAdminUserId = lineAdminUsersToTargetString(normalizedLineAdminUsers);
+
             await setDoc(docRef, {
                 ...settings,
                 storeLogoUrl: logoUrl,
@@ -626,6 +646,7 @@ export default function AdminSettingsPage() {
                 lineAdminUserId,
                 updatedAt: serverTimestamp()
             }, { merge: true });
+
             setSettings(prev => ({
                 ...prev,
                 storeLogoUrl: logoUrl,
@@ -634,14 +655,16 @@ export default function AdminSettingsPage() {
                 lineAdminUsers: normalizedLineAdminUsers,
                 lineAdminUserId
             }));
+
             if (logoUrl) {
                 setLogoPreview(logoUrl);
             }
+
             setShowSuccess(true);
-            setTimeout(() => setShowSuccess(false), 2000);
+            setTimeout(() => setShowSuccess(false), 2200);
         } catch (error) {
             console.error("Error saving settings:", error);
-            alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+            alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง");
         } finally {
             setIsSaving(false);
         }
@@ -649,847 +672,532 @@ export default function AdminSettingsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-gray-400" size={32} />
+            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-400 gap-3">
+                <Loader2 className="animate-spin text-slate-500" size={28} />
+                <span className="text-xs font-medium">กำลังโหลดการตั้งค่า...</span>
             </div>
         );
     }
 
     return (
-        <div className="max-w-5xl mx-auto space-y-4">
-            {/* Header */}
-            <div className="flex justify-between items-center">
-                <h1 className="text-xl font-bold text-gray-900">ตั้งค่า</h1>
-                <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${showSuccess
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-900 text-white hover:bg-gray-800'
-                        } disabled:opacity-50`}
-                >
-                    {isSaving ? (
-                        <Loader2 className="animate-spin" size={16} />
-                    ) : showSuccess ? (
-                        <Check size={16} />
-                    ) : (
-                        <Save size={16} />
-                    )}
-                    {showSuccess ? 'บันทึกแล้ว' : 'บันทึก'}
-                </button>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex flex-wrap gap-2">
-                {[
-                    { id: 'store', label: 'ข้อมูลร้านค้า' },
-                    { id: 'payment', label: 'ตั้งค่าการชำระเงิน' },
-                    { id: 'firestore', label: 'Firestore Usage' },
-                    { id: 'indexes', label: 'Firestore Indexes' },
-                    { id: 'shipping', label: 'การจัดส่ง' },
-                    { id: 'pickup', label: 'สถานที่รับ' },
-                    { id: 'line', label: 'การแจ้งเตือน LINE' },
-                ].map((tab) => (
+        <div className="max-w-5xl mx-auto space-y-4 pb-12 font-sans antialiased text-slate-800">
+            {/* Header: Zero-Noise, Compact, Action-oriented */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-slate-200/60">
+                <div>
+                    <h1 className="text-lg font-bold tracking-tight text-slate-900">ตั้งค่าระบบ</h1>
+                    <p className="text-xs text-slate-500 mt-0.5">จัดการข้อมูลร้านค้า ช่องทางชำระเงิน การจัดส่ง และการแจ้งเตือน</p>
+                </div>
+                <div className="flex items-center gap-2">
                     <button
-                        key={tab.id}
                         type="button"
-                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${activeTab === tab.id
-                            ? 'bg-gray-900 text-white border-gray-900'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                            }`}
+                        onClick={() => handleSave()}
+                        disabled={isSaving}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-150 shadow-xs cursor-pointer ${
+                            showSuccess
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'
+                        } disabled:opacity-60 disabled:cursor-not-allowed`}
                     >
-                        {tab.label}
+                        {isSaving ? (
+                            <Loader2 className="animate-spin" size={14} />
+                        ) : showSuccess ? (
+                            <Check size={14} className="stroke-[2.5]" />
+                        ) : (
+                            <Save size={14} />
+                        )}
+                        <span>{showSuccess ? 'บันทึกสำเร็จ' : isSaving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}</span>
                     </button>
-                ))}
+                </div>
             </div>
 
+            {/* Clean Segmented Tab Navigation */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100/80 rounded-xl overflow-x-auto no-scrollbar border border-slate-200/60 text-xs font-medium">
+                {TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg shrink-0 transition-all cursor-pointer select-none ${
+                                isActive
+                                    ? 'bg-white text-slate-900 font-semibold shadow-xs ring-1 ring-slate-200/80'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                            }`}
+                        >
+                            <Icon size={14} className={isActive ? 'text-slate-900' : 'text-slate-400'} />
+                            <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Main Form Content */}
             <form onSubmit={handleSave} className="space-y-4">
-                {/* Store Info */}
+                
+                {/* TAB 1: ข้อมูลร้านค้า (Store) */}
                 {activeTab === 'store' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <Store size={16} className="text-gray-500" />
-                        <span className="font-semibold text-sm text-gray-900">ข้อมูลร้านค้า</span>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="lg:col-span-2 space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        {/* Store Info Fields */}
+                        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 p-4.5 space-y-4 shadow-2xs">
+                            <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                                <Building2 size={16} className="text-slate-500" />
+                                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">ข้อมูลพื้นฐานร้านค้า</h2>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อร้าน</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อร้านค้า</label>
                                     <input
                                         type="text"
                                         name="storeName"
-                                        value={settings.storeName}
+                                        value={settings.storeName || ""}
                                         onChange={handleChange}
-                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                        placeholder="ชื่อร้านของคุณ"
+                                        className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition-colors"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">เบอร์โทร</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">เบอร์โทรศัพท์ติดต่อ</label>
                                     <input
                                         type="text"
                                         name="storePhone"
-                                        value={settings.storePhone}
+                                        value={settings.storePhone || ""}
                                         onChange={handleChange}
-                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                        placeholder="08x-xxx-xxxx"
+                                        className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition-colors"
                                     />
                                 </div>
                             </div>
+
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">ที่อยู่</label>
-                                <textarea
-                                    name="storeAddress"
-                                    value={settings.storeAddress}
+                                <label className="block text-xs font-medium text-slate-600 mb-1">อีเมลติดต่อร้านค้า</label>
+                                <input
+                                    type="email"
+                                    name="storeEmail"
+                                    value={settings.storeEmail || ""}
                                     onChange={handleChange}
-                                    rows={2}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 resize-none"
+                                    placeholder="contact@example.com"
+                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition-colors"
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">ลิ้งก์แผนที่ (Google Maps)</label>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">ที่อยู่ร้านค้า / หน้าสาขา</label>
+                                <textarea
+                                    name="storeAddress"
+                                    value={settings.storeAddress || ""}
+                                    onChange={handleChange}
+                                    rows={2}
+                                    placeholder="เลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"
+                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition-colors resize-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">ลิงก์ Google Maps</label>
                                 <input
                                     type="text"
                                     name="storeMapUrl"
-                                    value={settings.storeMapUrl}
+                                    value={settings.storeMapUrl || ""}
                                     onChange={handleChange}
                                     placeholder="https://maps.google.com/..."
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-800 focus:ring-1 focus:ring-slate-800 transition-colors"
                                 />
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="block text-xs font-semibold text-gray-500">โลโก้ร้านค้า</label>
-                            <div className="w-full aspect-square rounded-xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                        {/* Store Logo Card */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 space-y-3.5 shadow-2xs flex flex-col">
+                            <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                                <UploadCloud size={16} className="text-slate-500" />
+                                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">โลโก้ร้านค้า</h2>
+                            </div>
+
+                            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-4 min-h-[160px] text-center">
                                 {logoPreview ? (
-                                    <img src={logoPreview} alt="Store Logo" className="w-full h-full object-contain p-3" />
+                                    <div className="relative group w-28 h-28 flex items-center justify-center p-2 bg-white rounded-lg border border-slate-200 shadow-2xs">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={logoPreview} alt="Logo Preview" className="max-w-full max-h-full object-contain" />
+                                    </div>
                                 ) : (
-                                    <span className="text-xs text-gray-400">ยังไม่มีโลโก้</span>
+                                    <div className="space-y-1.5 text-center text-slate-400">
+                                        <Store size={32} className="mx-auto text-slate-300" />
+                                        <p className="text-xs font-medium text-slate-500">ยังไม่มีโลโก้ร้าน</p>
+                                        <p className="text-[11px] text-slate-400">รองรับไฟล์ PNG หรือ JPG</p>
+                                    </div>
                                 )}
                             </div>
-                            <label className="inline-flex items-center justify-center w-full px-3 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                                อัปโหลดโลโก้
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleLogoChange}
-                                    className="hidden"
-                                />
-                            </label>
-                            <p className="text-[11px] text-gray-500">แนะนำไฟล์ PNG พื้นหลังใส</p>
+
+                            <div>
+                                <label className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors shadow-2xs">
+                                    <UploadCloud size={14} className="text-slate-500" />
+                                    <span>เลือกไฟล์รูปโลโก้</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleLogoChange}
+                                        className="hidden"
+                                    />
+                                </label>
+                                <p className="text-[10px] text-center text-slate-400 mt-1.5">ขนาดแนะนำ: 400x400 px พื้นหลังโปร่งใส</p>
+                            </div>
                         </div>
                     </div>
-                </section>
                 )}
 
-                {/* Payment */}
+                {/* TAB 2: การชำระเงิน (Payment) */}
                 {activeTab === 'payment' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                    
-                    {/* Bank Transfer */}
-                    <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                                    <Banknote size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="font-semibold text-gray-900">โอนเงินผ่านบัญชีธนาคาร</h2>
-                                    <p className="text-xs text-gray-500">Bank Transfer</p>
-                                </div>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    name="enableBankTransfer"
-                                    checked={Boolean(settings.enableBankTransfer)}
-                                    onChange={handleChange}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-
-                        {settings.enableBankTransfer && (
-                            <div className="p-4">
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                    <CreditCard size={16} /> รายละเอียดบัญชี
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-3">
+                        {/* 1. โอนเงินผ่านธนาคาร */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-3 flex items-center justify-between bg-slate-50/50 border-b border-slate-100">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+                                        <Banknote size={16} />
+                                    </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อธนาคาร</label>
+                                        <h3 className="text-xs font-bold text-slate-900">โอนเงินผ่านบัญชีธนาคาร (Bank Transfer)</h3>
+                                        <p className="text-[11px] text-slate-500">เปิดให้ลูกค้าแนบสลิปโอนเงินเข้าบัญชี</p>
+                                    </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="enableBankTransfer"
+                                        checked={Boolean(settings.enableBankTransfer)}
+                                        onChange={handleChange}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                </label>
+                            </div>
+
+                            {settings.enableBankTransfer && (
+                                <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อธนาคาร</label>
                                         <input
                                             type="text"
                                             name="bankName"
-                                            value={settings.bankName}
+                                            value={settings.bankName || ""}
                                             onChange={handleChange}
                                             placeholder="เช่น กสิกรไทย, ไทยพาณิชย์"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">เลขที่บัญชี</label>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">เลขที่บัญชี</label>
                                         <input
                                             type="text"
                                             name="bankAccountNumber"
-                                            value={settings.bankAccountNumber}
+                                            value={settings.bankAccountNumber || ""}
                                             onChange={handleChange}
                                             placeholder="xxx-x-xxxxx-x"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อบัญชี</label>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อบัญชีผู้รับ</label>
                                         <input
                                             type="text"
                                             name="bankAccountName"
-                                            value={settings.bankAccountName}
+                                            value={settings.bankAccountName || ""}
                                             onChange={handleChange}
                                             placeholder="ชื่อ-นามสกุล หรือ บริษัท"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </section>
-
-                    {/* PromptPay */}
-                    <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                                    <QrCode size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="font-semibold text-gray-900">พร้อมเพย์ (PromptPay)</h2>
-                                    <p className="text-xs text-gray-500">QR Code Payment</p>
-                                </div>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    name="enablePromptPay"
-                                    checked={Boolean(settings.enablePromptPay)}
-                                    onChange={handleChange}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
+                            )}
                         </div>
 
-                        {settings.enablePromptPay && (
-                            <div className="p-4">
-                                <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-900">
-                                    <Smartphone size={16} /> รายละเอียดพร้อมเพย์
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* 2. พร้อมเพย์ (PromptPay) */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-3 flex items-center justify-between bg-slate-50/50 border-b border-slate-100">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+                                        <QrCode size={16} />
+                                    </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">PromptPay ID (เบอร์โทร/เลขผู้เสียภาษี)</label>
+                                        <h3 className="text-xs font-bold text-slate-900">พร้อมเพย์ (PromptPay QR)</h3>
+                                        <p className="text-[11px] text-slate-500">สร้าง QR Code รับเงินอัตโนมัติตามยอดคำสั่งซื้อ</p>
+                                    </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="enablePromptPay"
+                                        checked={Boolean(settings.enablePromptPay)}
+                                        onChange={handleChange}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                </label>
+                            </div>
+
+                            {settings.enablePromptPay && (
+                                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">PromptPay ID (เบอร์โทร หรือ เลขผู้เสียภาษี)</label>
                                         <input
                                             type="text"
                                             name="promptPayId"
-                                            value={settings.promptPayId}
+                                            value={settings.promptPayId || ""}
                                             onChange={handleChange}
-                                            placeholder="08xxxxxxxx หรือ 1xxxxxxxxxxxx"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                            placeholder="08xxxxxxxx หรือ 0xxxxxxxxxxxx"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อผู้รับโอน</label>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">ชื่อบัญชีผู้รับเงิน</label>
                                         <input
                                             type="text"
                                             name="promptPayAccountName"
-                                            value={settings.promptPayAccountName}
+                                            value={settings.promptPayAccountName || ""}
                                             onChange={handleChange}
-                                            placeholder="ชื่อ-นามสกุล หรือ บริษัท"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                            placeholder="ชื่อบัญชีพร้อมเพย์"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                 </div>
-                                <p className="text-[11px] text-gray-500 mt-2">ไม่ต้องอัปโหลด QR ระบบจะแสดงจาก PromptPay ID</p>
-                            </div>
-                        )}
-                    </section>
-  {/* Slip Verification (SlipOK) */}
-                    <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
-                                    <Check size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="font-semibold text-gray-900">Slip Verification (SlipOK)</h2>
-                                    <p className="text-xs text-gray-500">ตรวจสลิปอัตโนมัติ</p>
-                                </div>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    name="enableSlipVerify"
-                                    checked={Boolean(settings.enableSlipVerify)}
-                                    onChange={handleChange}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                            </label>
+                            )}
                         </div>
 
-                        {settings.enableSlipVerify && (
-                            <div className="p-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* 3. Slip Verification (SlipOK) */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-3 flex items-center justify-between bg-slate-50/50 border-b border-slate-100">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                        <ShieldCheck size={16} />
+                                    </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Branch ID</label>
+                                        <h3 className="text-xs font-bold text-slate-900">ตรวจสลิปอัตโนมัติ (SlipOK API)</h3>
+                                        <p className="text-[11px] text-slate-500">ตรวจสอบความถูกต้องของสลิป ยอดเงิน และเวลาโอนแบบเรียลไทม์</p>
+                                    </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="enableSlipVerify"
+                                        checked={Boolean(settings.enableSlipVerify)}
+                                        onChange={handleChange}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                </label>
+                            </div>
+
+                            {settings.enableSlipVerify && (
+                                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">SlipOK Branch ID</label>
                                         <input
                                             type="text"
                                             name="slipokBranchId"
-                                            value={settings.slipokBranchId}
+                                            value={settings.slipokBranchId || ""}
                                             onChange={handleChange}
-                                            placeholder="branch_xxx"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                            placeholder="branch_xxxx"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">API Key</label>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">SlipOK API Key</label>
                                         <input
                                             type="password"
                                             name="slipokApiKey"
-                                            value={settings.slipokApiKey}
+                                            value={settings.slipokApiKey || ""}
                                             onChange={handleChange}
-                                            placeholder="••••••••"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                            placeholder="••••••••••••••••"
+                                            className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                         />
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </section>
-                  
-                   {/* COD */}
-                    <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
-                                    <Truck size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="font-semibold text-gray-900">เก็บเงินปลายทาง (COD)</h2>
-                                    <p className="text-xs text-gray-500">Cash on Delivery</p>
-                                </div>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    name="enableCOD"
-                                    checked={Boolean(settings.enableCOD)}
-                                    onChange={handleChange}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                            </label>
-                        </div>
-                        {settings.enableCOD && (
-                            <div className="p-4">
-                                <p className="text-sm text-gray-600 flex items-center gap-2">
-                                    <Check size={16} className="text-green-500" />
-                                    เปิดใช้งานการเก็บเงินปลายทางแล้ว
-                                </p>
-                            </div>
-                        )}
-                    </section>
-
-                    
-
-                    {/* Payment Gateways */}
-                    <section className="bg-white rounded-xl border border-gray-100 overflow-hidden lg:col-span-2">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 bg-gray-50">
-                            <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
-                                <Globe size={18} />
-                            </div>
-                            <div>
-                                <h2 className="font-semibold text-gray-900">Payment Gateway</h2>
-                                <p className="text-xs text-gray-500">Stripe, Omise</p>
-                            </div>
+                            )}
                         </div>
 
-                        <div className="p-4 space-y-6">
-                            {/* Stripe */}
-                            <div className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold text-gray-800">Stripe</span>
-                                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Global</span>
+                        {/* 4. เก็บเงินปลายทาง (COD) */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-3 flex items-center justify-between bg-slate-50/50">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+                                        <Truck size={16} />
                                     </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            name="enableStripe"
-                                            checked={Boolean(settings.enableStripe)}
-                                            onChange={handleChange}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                                    </label>
-                                </div>
-                                {settings.enableStripe && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1">Publishable Key</label>
-                                            <input
-                                                type="text"
-                                                name="stripePublishableKey"
-                                                value={settings.stripePublishableKey}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1">Secret Key</label>
-                                            <input
-                                                type="password"
-                                                name="stripeSecretKey"
-                                                value={settings.stripeSecretKey}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Omise */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold text-gray-800">Omise</span>
-                                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Thailand</span>
-                                    </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            name="enableOmise"
-                                            checked={Boolean(settings.enableOmise)}
-                                            onChange={handleChange}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </label>
-                                </div>
-                                {settings.enableOmise && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1">Public Key</label>
-                                            <input
-                                                type="text"
-                                                name="omisePublicKey"
-                                                value={settings.omisePublicKey}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500 mb-1">Secret Key</label>
-                                            <input
-                                                type="password"
-                                                name="omiseSecretKey"
-                                                value={settings.omiseSecretKey}
-                                                onChange={handleChange}
-                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </section>
-
-                </div>
-                )}
-
-                {activeTab === 'firestore' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                        <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
-                                <Database size={18} />
-                            </div>
-                            <div>
-                                <h2 className="font-semibold text-gray-900">Firestore Usage</h2>
-                                <p className="text-xs text-gray-500">พื้นที่และโควต้าการใช้งาน Firestore</p>
-                            </div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                fetchFirestoreUsage();
-                                fetchStorageUsage();
-                            }}
-                            disabled={firestoreUsageLoading || storageUsageLoading}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-60"
-                        >
-                            <RefreshCw size={12} className={firestoreUsageLoading || storageUsageLoading ? "animate-spin" : ""} />
-                            รีเฟรช
-                        </button>
-                    </div>
-
-                    <div className="p-4 space-y-4">
-                        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-blue-900">Firebase Storage: รูปสินค้า</p>
-                                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
-                                            <p className="text-blue-500">สถานะ</p>
-                                            <p className="font-bold text-blue-950">{settings.useStorageForProductImages ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
-                                            <p className="text-blue-500">Bucket</p>
-                                            <p className="truncate font-bold text-blue-950">{storageUsage?.bucketName || "-"}</p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
-                                            <p className="text-blue-500">Usage</p>
-                                            <p className="font-bold text-blue-950">
-                                                {formatBytes(storageUsage?.metrics.storageBytes)} / {storageUsage?.limits.storageBytes != null ? formatBytes(storageUsage.limits.storageBytes) : "ไม่จำกัด"}
-                                            </p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-blue-100">
-                                            <p className="text-blue-500">Objects</p>
-                                            <p className="font-bold text-blue-950">{storageUsage?.metrics.objectCount != null ? storageUsage.metrics.objectCount.toLocaleString() : "-"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
-                                        <div
-                                            className="h-full bg-blue-600 transition-all"
-                                            style={{ width: `${Math.min(100, Math.max(0, storageUsage?.percent.storage || 0))}%` }}
-                                        />
+                                    <div>
+                                        <h3 className="text-xs font-bold text-slate-900">เก็บเงินปลายทาง (Cash on Delivery)</h3>
+                                        <p className="text-[11px] text-slate-500">เปิดให้ลูกค้าชำระเงินเมื่อสินค้าส่งถึงที่หมาย</p>
                                     </div>
                                 </div>
-                                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-blue-900 shadow-sm ring-1 ring-blue-100">
+                                <label className="relative inline-flex items-center cursor-pointer">
                                     <input
                                         type="checkbox"
-                                        name="useStorageForProductImages"
-                                        checked={Boolean(settings.useStorageForProductImages)}
+                                        name="enableCOD"
+                                        checked={Boolean(settings.enableCOD)}
                                         onChange={handleChange}
-                                        className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                        className="sr-only peer"
                                     />
-                                    {settings.useStorageForProductImages ? "เปิดอยู่" : "ปิดอยู่"}
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
                                 </label>
                             </div>
                         </div>
 
-                        <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-3">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-semibold text-amber-900">Firebase Storage: รูปสลิป</p>
-                                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
-                                            <p className="text-amber-600">สถานะ</p>
-                                            <p className="font-bold text-amber-950">{settings.useStorageForPaymentSlips ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
-                                            <p className="text-amber-600">Connection</p>
-                                            <p className={`font-bold ${storageRuleCheck.status === "ok" ? "text-green-700" : storageRuleCheck.status === "failed" ? "text-red-700" : "text-amber-950"}`}>
-                                                {storageRuleCheck.status === "ok" ? "ถูกต้อง" : storageRuleCheck.status === "failed" ? "ผิดพลาด" : storageRuleCheck.status === "checking" ? "กำลังตรวจ" : "ยังไม่ตรวจ"}
-                                            </p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
-                                            <p className="text-amber-600">Rules</p>
-                                            <p className={`font-bold ${storageRuleCheck.status === "ok" ? "text-green-700" : storageRuleCheck.status === "failed" ? "text-red-700" : "text-amber-950"}`}>
-                                                {storageRuleCheck.status === "ok" ? "ทำงาน" : storageRuleCheck.status === "failed" ? "ไม่ผ่าน" : "-"}
-                                            </p>
-                                        </div>
-                                        <div className="rounded-lg bg-white/80 p-2 ring-1 ring-amber-100">
-                                            <p className="text-amber-600">Plan</p>
-                                            <p className="font-bold uppercase text-amber-950">{storageUsage?.plan || "-"}</p>
-                                        </div>
-                                    </div>
-                                    <p className="mt-2 truncate text-[11px] text-amber-700">{storageRuleCheck.message}</p>
+                        {/* 5. Payment Gateways (Stripe & Omise) */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
+                                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+                                    <Globe size={16} />
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={checkStorageRules}
-                                        disabled={storageRuleCheck.status === "checking"}
-                                        className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm ring-1 ring-amber-100 hover:bg-amber-50 disabled:opacity-60"
-                                    >
-                                        <RefreshCw size={12} className={storageRuleCheck.status === "checking" ? "animate-spin" : ""} />
-                                        ตรวจ Rules
-                                    </button>
-                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm ring-1 ring-amber-100">
-                                        <input
-                                            type="checkbox"
-                                            name="useStorageForPaymentSlips"
-                                            checked={Boolean(settings.useStorageForPaymentSlips)}
-                                            onChange={handleChange}
-                                            className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
-                                        />
-                                        {settings.useStorageForPaymentSlips ? "เปิดอยู่" : "ปิดอยู่"}
-                                    </label>
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-900">Payment Gateway สากล</h3>
+                                    <p className="text-[11px] text-slate-500">เชื่อมต่อระบบชำระผ่านบัตรเครดิต/เดบิต</p>
                                 </div>
                             </div>
-                        </div>
 
-                        {storageUsageError && (
-                            <div className="text-sm text-red-600">{storageUsageError}</div>
-                        )}
-
-                        {firestoreUsageError && (
-                            <div className="text-sm text-red-600">{firestoreUsageError}</div>
-                        )}
-
-                        {!firestoreUsageError && (
-                            <>
-                                <div>
-                                    <div className="flex items-center justify-between text-xs font-semibold text-gray-600 mb-1.5">
-                                        <span>
-                                            พื้นที่ใช้งาน {formatBytes(firestoreUsage?.metrics?.storageBytes)} / {firestoreUsage?.limits?.storageBytes != null ? formatBytes(firestoreUsage?.limits?.storageBytes) : "ไม่จำกัด"}
-                                        </span>
-                                        <span>
-                                            {firestoreUsage?.percent?.storage != null
-                                                ? `${firestoreUsage.percent.storage.toFixed(2)}%`
-                                                : "N/A"}
-                                        </span>
+                            <div className="p-4 space-y-4">
+                                {/* Stripe */}
+                                <div className="pb-3.5 border-b border-slate-100">
+                                    <div className="flex items-center justify-between mb-2.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-slate-800">Stripe Payment</span>
+                                            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">บัตรเครดิตสากล</span>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                name="enableStripe"
+                                                checked={Boolean(settings.enableStripe)}
+                                                onChange={handleChange}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                        </label>
                                     </div>
-                                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all"
-                                            style={{ width: `${Math.min(100, Math.max(0, firestoreUsage?.percent?.storage || 0))}%` }}
-                                        />
-                                    </div>
-                                    <p className="text-[11px] text-gray-400 mt-2">
-                                        ข้อมูลนี้ดึงจาก Google Cloud Monitoring ตามแผน Firebase จริง
-                                    </p>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                                    {[
-                                        {
-                                            label: "Reads (24h)",
-                                            value: firestoreUsage?.metrics?.reads24h,
-                                            limit: firestoreUsage?.limits?.reads24h,
-                                            percent: firestoreUsage?.percent?.reads24h
-                                        },
-                                        {
-                                            label: "Writes (24h)",
-                                            value: firestoreUsage?.metrics?.writes24h,
-                                            limit: firestoreUsage?.limits?.writes24h,
-                                            percent: firestoreUsage?.percent?.writes24h
-                                        },
-                                        {
-                                            label: "Deletes (24h)",
-                                            value: firestoreUsage?.metrics?.deletes24h,
-                                            limit: firestoreUsage?.limits?.deletes24h,
-                                            percent: firestoreUsage?.percent?.deletes24h
-                                        }
-                                    ].map((item) => (
-                                        <div key={item.label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                                            <p className="text-gray-400">{item.label}</p>
-                                            <p className="font-semibold text-gray-900">
-                                                {item.value != null ? item.value.toLocaleString() : "-"} / {item.limit != null ? item.limit.toLocaleString() : "ไม่จำกัด"}
-                                            </p>
-                                            <div className="mt-2 h-1.5 rounded-full bg-white overflow-hidden">
-                                                <div
-                                                    className="h-full bg-gray-900 transition-all"
-                                                    style={{ width: `${Math.min(100, Math.max(0, item.percent || 0))}%` }}
+                                    {settings.enableStripe && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-500 mb-1">Publishable Key</label>
+                                                <input
+                                                    type="text"
+                                                    name="stripePublishableKey"
+                                                    value={settings.stripePublishableKey || ""}
+                                                    onChange={handleChange}
+                                                    placeholder="pk_test_..."
+                                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                                 />
                                             </div>
-                                            <p className="mt-1 text-[11px] text-gray-500">
-                                                {item.percent != null ? `${item.percent.toFixed(2)}%` : "N/A"}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-
-                        <div className="rounded-lg border border-red-100 bg-red-50/50 p-3 space-y-3">
-                            <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
-                                <Trash2 size={16} />
-                                ล้างสลิปเก่า
-                            </div>
-                            <p className="text-xs text-red-600">ลบข้อมูลในคอลเลกชัน `payment_slips` และไฟล์ Firebase Storage ที่ผูกไว้ ที่เก่ากว่าระยะเวลาที่เลือก</p>
-                            <div className="flex flex-wrap gap-2">
-                                {[1, 3, 6].map((months) => (
-                                    <button
-                                        key={months}
-                                        type="button"
-                                        onClick={() => handleCleanupSlips(months as 1 | 3 | 6)}
-                                        disabled={slipCleanupLoadingMonth !== null}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-60"
-                                    >
-                                        {slipCleanupLoadingMonth === months ? (
-                                            <Loader2 size={12} className="animate-spin" />
-                                        ) : (
-                                            <Trash2 size={12} />
-                                        )}
-                                        เก่ากว่า {months} เดือน
-                                    </button>
-                                ))}
-                            </div>
-                            {slipCleanupMessage && (
-                                <p className="text-xs text-red-700">{slipCleanupMessage}</p>
-                            )}
-                        </div>
-                    </div>
-                </section>
-                )}
-
-                {activeTab === 'indexes' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="px-3 py-2.5 border-b border-gray-100 flex flex-col gap-2 bg-gray-50 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-md bg-indigo-100 flex items-center justify-center text-indigo-600">
-                                <Database size={16} />
-                            </div>
-                            <div>
-                                <h2 className="text-sm font-semibold text-gray-900">Firestore Indexes</h2>
-                                <p className="text-xs text-gray-500">ตรวจสอบ Composite Indexes ที่จำเป็น และกดลิงก์เพื่อสร้างใน Firebase Console</p>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={fetchIndexChecks}
-                                disabled={indexCheckLoading}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-60"
-                            >
-                                <RefreshCw size={12} className={indexCheckLoading ? "animate-spin" : ""} />
-                                ตรวจสอบ Indexes
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="p-3 space-y-3">
-                        {indexCheckError && (
-                            <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{indexCheckError}</div>
-                        )}
-
-                        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-                            {indexCheckLoading && indexCheckResults.length === 0 ? (
-                                <div className="flex items-center justify-center p-8 text-sm text-gray-500">
-                                    <Loader2 className="mr-2 animate-spin" size={16} />
-                                    กำลังตรวจสอบ Composite Indexes...
-                                </div>
-                            ) : indexCheckResults.length === 0 ? (
-                                <div className="p-4 text-sm text-gray-500">
-                                    กด “ตรวจสอบ Indexes” เพื่อให้ระบบทดสอบ query สำคัญและสร้างลิงก์สำหรับ Index ที่ยังขาด
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-gray-100">
-                                {indexCheckResults.map((item) => {
-                                    const statusClass = item.status === "ready"
-                                        ? "bg-green-50 text-green-700 border-green-100"
-                                        : item.status === "missing"
-                                            ? "bg-amber-50 text-amber-700 border-amber-100"
-                                            : "bg-red-50 text-red-700 border-red-100";
-                                    const statusLabel = item.status === "ready"
-                                        ? "พร้อมใช้งาน"
-                                        : item.status === "missing"
-                                            ? "ต้องสร้าง"
-                                            : "ตรวจไม่สำเร็จ";
-                                    return (
-                                        <div key={item.id} className="grid gap-2 px-3 py-2.5 text-xs md:grid-cols-[108px_112px_1fr_1.2fr_96px] md:items-center">
                                             <div>
-                                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${statusClass}`}>
-                                                    {statusLabel}
-                                                </span>
-                                            </div>
-                                            <div className="font-mono font-bold text-gray-900">{item.collection}</div>
-                                            <div className="min-w-0">
-                                                <p className="truncate font-semibold text-gray-800">{item.title}</p>
-                                                <p className="truncate text-[11px] text-gray-500">{item.source}</p>
-                                            </div>
-                                            <div className="flex min-w-0 flex-wrap gap-1">
-                                                {item.fields.map((field) => (
-                                                    <span key={field} className="rounded-md bg-gray-50 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 ring-1 ring-gray-100">
-                                                        {field}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                            <div className="flex justify-start md:justify-end">
-                                                    {item.status === "error" && item.error && (
-                                                    <span className="line-clamp-1 text-[11px] text-red-600" title={item.error}>{item.error}</span>
-                                                )}
-                                                {item.status === "missing" && item.createUrl ? (
-                                                    <a
-                                                        href={item.createUrl}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md bg-amber-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700"
-                                                    >
-                                                        <ExternalLink size={12} />
-                                                        สร้าง
-                                                    </a>
-                                                ) : item.status === "ready" ? (
-                                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-green-600 px-2.5 py-1.5 text-[11px] font-bold text-white">
-                                                        <Check size={12} />
-                                                        พร้อม
-                                                    </span>
-                                                ) : null}
+                                                <label className="block text-[11px] font-medium text-slate-500 mb-1">Secret Key</label>
+                                                <input
+                                                    type="password"
+                                                    name="stripeSecretKey"
+                                                    value={settings.stripeSecretKey || ""}
+                                                    onChange={handleChange}
+                                                    placeholder="sk_test_..."
+                                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
+                                                />
                                             </div>
                                         </div>
-                                    );
-                                })}
+                                    )}
                                 </div>
-                            )}
-                        </div>
 
-                        {indexCheckedAt && (
-                            <div className="rounded-md border border-gray-100 bg-white px-3 py-2 text-xs text-gray-500">
-                                ตรวจล่าสุด: {new Date(indexCheckedAt).toLocaleString("th-TH")}
+                                {/* Omise */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-slate-800">Omise Payment</span>
+                                            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">Thailand Gateway</span>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                name="enableOmise"
+                                                checked={Boolean(settings.enableOmise)}
+                                                onChange={handleChange}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                        </label>
+                                    </div>
+                                    {settings.enableOmise && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-500 mb-1">Public Key</label>
+                                                <input
+                                                    type="text"
+                                                    name="omisePublicKey"
+                                                    value={settings.omisePublicKey || ""}
+                                                    onChange={handleChange}
+                                                    placeholder="pkey_test_..."
+                                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-500 mb-1">Secret Key</label>
+                                                <input
+                                                    type="password"
+                                                    name="omiseSecretKey"
+                                                    value={settings.omiseSecretKey || ""}
+                                                    onChange={handleChange}
+                                                    placeholder="skey_test_..."
+                                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        )}
+                        </div>
                     </div>
-                </section>
                 )}
 
-                {/* Shipping */}
+                {/* TAB 3: การจัดส่ง (Shipping) */}
                 {activeTab === 'shipping' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <Truck size={16} className="text-gray-500" />
-                        <span className="font-semibold text-sm text-gray-900">การจัดส่ง</span>
-                    </div>
-                    <div className="p-4 space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 space-y-4 shadow-2xs">
+                        {/* Standard Fee */}
+                        <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                            <Truck size={16} className="text-slate-500" />
+                            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">ค่าจัดส่งมาตรฐาน</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">ค่าจัดส่ง (บาท)</label>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">ค่าจัดส่งพื้นฐาน (บาท)</label>
                                 <input
                                     type="number"
                                     name="shippingFee"
-                                    value={settings.shippingFee}
+                                    value={settings.shippingFee ?? 0}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">ส่งฟรีเมื่อซื้อครบ (บาท)</label>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">ส่งฟรีเมื่อยอดสั่งซื้อครบ (บาท)</label>
                                 <input
                                     type="number"
                                     name="freeShippingThreshold"
-                                    value={settings.freeShippingThreshold}
+                                    value={settings.freeShippingThreshold ?? 0}
                                     onChange={handleChange}
-                                    placeholder="0 = ไม่มี"
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                    placeholder="0 = ไม่เปิดใช้ส่งฟรี"
+                                    className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                 />
                             </div>
                         </div>
 
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                            <div className="flex items-center justify-between gap-3 mb-3">
+                        {/* Custom Options */}
+                        <div className="pt-2">
+                            <div className="flex items-center justify-between mb-3">
                                 <div>
-                                    <p className="text-sm font-semibold text-gray-900">ตัวเลือกการจัดส่ง</p>
-                                    <p className="text-xs text-gray-400">กำหนดค่าจัดส่งตามสถานที่ ยอดเงิน หรือจำนวนสินค้า</p>
+                                    <h3 className="text-xs font-bold text-slate-800">ตัวเลือกการจัดส่งเพิ่มเติม</h3>
+                                    <p className="text-[11px] text-slate-400">กำหนดเงื่อนไขค่าจัดส่งตามสถานที่ ยอดสั่งซื้อ หรือจำนวนชิ้น</p>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={addShippingOption}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800 cursor-pointer shadow-2xs"
                                 >
-                                    <Plus size={14} />
-                                    เพิ่มตัวเลือก
+                                    <Plus size={13} />
+                                    <span>เพิ่มตัวเลือก</span>
                                 </button>
                             </div>
 
@@ -1499,432 +1207,605 @@ export default function AdminSettingsPage() {
                                     const usesThreshold = conditionType !== "location" && conditionType !== "standard";
 
                                     return (
-                                        <div key={option.id} className="rounded-lg border border-gray-200 bg-white p-3">
-                                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_170px_120px_120px_auto_auto] lg:items-center">
+                                        <div key={option.id} className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg space-y-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-[1.5fr_130px_100px_90px_auto_auto] gap-2 items-center">
                                                 <input
                                                     type="text"
                                                     value={option.name}
-                                                    onChange={(event) => updateShippingOption(option.id, "name", event.target.value)}
-                                                    placeholder="ชื่อ เช่น รับที่สนามบิน"
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                    onChange={(e) => updateShippingOption(option.id, "name", e.target.value)}
+                                                    placeholder="ชื่อตัวเลือก เช่น EMS / นัดรับ"
+                                                    className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-800"
                                                 />
                                                 <select
                                                     value={conditionType}
-                                                    onChange={(event) => updateShippingOption(option.id, "conditionType", event.target.value as ShippingConditionType)}
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                    onChange={(e) => updateShippingOption(option.id, "conditionType", e.target.value as ShippingConditionType)}
+                                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-800 focus:outline-none focus:border-slate-800"
                                                 >
-                                                    {Object.entries(shippingConditionLabels).map(([value, label]) => (
-                                                        <option key={value} value={value}>{label}</option>
+                                                    {Object.entries(shippingConditionLabels).map(([val, lbl]) => (
+                                                        <option key={val} value={val}>{lbl}</option>
                                                     ))}
                                                 </select>
                                                 <input
                                                     type="number"
                                                     value={option.threshold || 0}
-                                                    onChange={(event) => updateShippingOption(option.id, "threshold", Number(event.target.value))}
+                                                    onChange={(e) => updateShippingOption(option.id, "threshold", Number(e.target.value))}
                                                     disabled={!usesThreshold}
-                                                    placeholder={conditionType.includes("price") ? "ยอดเงิน" : "จำนวน"}
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 disabled:opacity-40"
+                                                    placeholder="เกณฑ์"
+                                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-800 disabled:bg-slate-100 disabled:opacity-40"
                                                 />
                                                 <input
                                                     type="number"
                                                     value={option.fee}
-                                                    onChange={(event) => updateShippingOption(option.id, "fee", Number(event.target.value))}
+                                                    onChange={(e) => updateShippingOption(option.id, "fee", Number(e.target.value))}
                                                     placeholder="ค่าส่ง"
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-800"
                                                 />
-                                                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600">
+                                                <label className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-600 cursor-pointer select-none">
                                                     <input
                                                         type="checkbox"
                                                         checked={option.isActive !== false}
-                                                        onChange={(event) => updateShippingOption(option.id, "isActive", event.target.checked)}
-                                                        className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900/20"
+                                                        onChange={(e) => updateShippingOption(option.id, "isActive", e.target.checked)}
+                                                        className="w-3.5 h-3.5 rounded text-slate-900 border-slate-300 focus:ring-0"
                                                     />
-                                                    เปิดใช้
+                                                    <span>เปิด</span>
                                                 </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => removeShippingOption(option.id)}
-                                                    className="inline-flex items-center justify-center p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                                    aria-label="ลบตัวเลือกจัดส่ง"
+                                                    className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                                    title="ลบตัวเลือก"
                                                 >
-                                                    <Trash2 size={16} />
+                                                    <Trash2 size={15} />
                                                 </button>
                                             </div>
                                             <input
                                                 type="text"
                                                 value={option.description || ""}
-                                                onChange={(event) => updateShippingOption(option.id, "description", event.target.value)}
+                                                onChange={(e) => updateShippingOption(option.id, "description", e.target.value)}
                                                 placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"
-                                                className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-700 focus:outline-none focus:border-slate-800"
                                             />
                                         </div>
                                     );
                                 })}
+
                                 {(settings.shippingOptions || []).length === 0 && (
-                                    <div className="rounded-lg border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
-                                        ยังไม่มีตัวเลือกการจัดส่ง
+                                    <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg">
+                                        ยังไม่มีตัวเลือกการจัดส่งเพิ่มเติม กด &ldquo;เพิ่มตัวเลือก&rdquo; ด้านบนเพื่อสร้างใหม่
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
-                </section>
                 )}
 
-                {/* Pickup */}
+                {/* TAB 4: จุดรับสินค้า (Pickup) */}
                 {activeTab === 'pickup' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <MapPin size={16} className="text-gray-500" />
-                        <div>
-                            <span className="font-semibold text-sm text-gray-900">สถานที่รับสินค้า</span>
-                            <p className="text-xs text-gray-400">ใช้เป็นตัวเลือกเมื่อแอดมินตั้งสถานะสินค้าเป็นพร้อมรับ</p>
-                        </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
-                            <div>
-                                <p className="text-sm font-semibold text-gray-900">ตัวเลือกสถานที่รับ</p>
-                                <p className="text-xs text-gray-400">เลือกเปิด/ปิด และแก้ข้อความที่จะแสดงให้ลูกค้าเห็นได้</p>
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 space-y-4 shadow-2xs">
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                                <MapPin size={16} className="text-slate-500" />
+                                <div>
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">จุดรับสินค้า / ล็อกเกอร์</h2>
+                                    <p className="text-[11px] text-slate-400">ตัวเลือกสถานที่รับสินค้าเมื่อแอดมินตั้งสถานะเป็น &ldquo;พร้อมรับ&rdquo;</p>
+                                </div>
                             </div>
                             <button
                                 type="button"
                                 onClick={addPickupOption}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800 cursor-pointer shadow-2xs"
                             >
-                                <Plus size={14} />
-                                เพิ่มตัวเลือก
+                                <Plus size={13} />
+                                <span>เพิ่มจุดรับ</span>
                             </button>
                         </div>
 
                         <div className="space-y-2">
                             {(settings.pickupOptions || []).map((option) => (
-                                <div key={option.id} className="rounded-lg border border-gray-200 bg-white p-3">
-                                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-center">
+                                <div key={option.id} className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+                                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
                                         <input
                                             type="text"
                                             value={option.label}
-                                            onChange={(event) => updatePickupOption(option.id, "label", event.target.value)}
-                                            placeholder="เช่น locker ช่อง 01 รหัส 1234"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                            onChange={(e) => updatePickupOption(option.id, "label", e.target.value)}
+                                            placeholder="ชื่อจุดรับ เช่น Locker ช่อง 01"
+                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-800"
                                         />
                                         <input
                                             type="text"
                                             value={option.detail || ""}
-                                            onChange={(event) => updatePickupOption(option.id, "detail", event.target.value)}
-                                            placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"
-                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                            onChange={(e) => updatePickupOption(option.id, "detail", e.target.value)}
+                                            placeholder="รหัส หรือคำอธิบายเพิ่มเติม (ไม่บังคับ)"
+                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-800"
                                         />
-                                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600">
+                                        <label className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-600 cursor-pointer select-none">
                                             <input
                                                 type="checkbox"
                                                 checked={option.isActive !== false}
-                                                onChange={(event) => updatePickupOption(option.id, "isActive", event.target.checked)}
-                                                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900/20"
+                                                onChange={(e) => updatePickupOption(option.id, "isActive", e.target.checked)}
+                                                className="w-3.5 h-3.5 rounded text-slate-900 border-slate-300 focus:ring-0"
                                             />
-                                            เปิดใช้
+                                            <span>เปิดใช้</span>
                                         </label>
                                         <button
                                             type="button"
                                             onClick={() => removePickupOption(option.id)}
-                                            className="inline-flex items-center justify-center p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                            aria-label="ลบสถานที่รับ"
+                                            className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                            title="ลบจุดรับ"
                                         >
-                                            <Trash2 size={16} />
+                                            <Trash2 size={15} />
                                         </button>
                                     </div>
                                 </div>
                             ))}
+
                             {(settings.pickupOptions || []).length === 0 && (
-                                <div className="rounded-lg border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
-                                    ยังไม่มีสถานที่รับ
+                                <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg">
+                                    ยังไม่มีจุดรับสินค้า กด &ldquo;เพิ่มจุดรับ&rdquo; เพื่อกำหนดจุดรับหน้าร้านหรือล็อกเกอร์
                                 </div>
                             )}
                         </div>
                     </div>
-                </section>
                 )}
 
-                {/* Notifications */}
+                {/* TAB 5: แจ้งเตือน LINE (LINE Notifications) */}
                 {activeTab === 'line' && (
-                <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <Bell size={16} className="text-gray-500" />
-                        <span className="font-semibold text-sm text-gray-900">การแจ้งเตือน LINE</span>
-                    </div>
-                    <div className="p-4 space-y-4">
-                        <div className="rounded-xl border border-gray-100 bg-white p-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-semibold text-gray-700">โควต้าส่งข้อความของ API</p>
-                                    <p className="text-[11px] text-gray-400">อ้างอิงจาก Token ที่บันทึกแล้ว</p>
+                    <div className="space-y-4">
+                        {/* LINE Quota Bar: Compact KPI Strip */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
+                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-1.5">
+                                    <Bell size={14} className="text-slate-600" />
+                                    <span className="text-xs font-bold text-slate-800">โควต้าข้อความ LINE Messaging API</span>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={fetchLineQuota}
                                     disabled={lineQuotaLoading}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200 rounded cursor-pointer disabled:opacity-50"
                                 >
-                                    <RefreshCw size={12} className={lineQuotaLoading ? "animate-spin" : ""} />
-                                    รีเฟรช
+                                    <RefreshCw size={11} className={lineQuotaLoading ? "animate-spin" : ""} />
+                                    <span>รีเฟรชโควต้า</span>
                                 </button>
                             </div>
-                            {lineQuotaLoading && (
-                                <div className="mt-2 text-[11px] text-gray-500">กำลังโหลดโควต้า...</div>
-                            )}
-                            {lineQuotaError && (
-                                <div className="mt-2 text-[11px] text-red-500">{lineQuotaError}</div>
-                            )}
-                            {!lineQuotaLoading && !lineQuotaError && (
-                                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                    <div className="rounded-lg bg-gray-50 p-3 border border-gray-100">
-                                        <p className="text-gray-400">ประเภท</p>
-                                        <p className="font-semibold text-gray-900">
-                                            {lineQuota?.type === "unlimited" ? "ไม่จำกัด" : "จำกัด"}
-                                        </p>
+
+                            {lineQuotaError ? (
+                                <p className="text-xs text-red-600">{lineQuotaError}</p>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                    <div className="p-2 bg-slate-50 rounded-lg">
+                                        <span className="text-[10px] text-slate-400 block">แพ็กเกจ</span>
+                                        <span className="font-semibold text-slate-800">
+                                            {lineQuota?.type === "unlimited" ? "ไม่จำกัด (Unlimited)" : "จำกัดข้อความ"}
+                                        </span>
                                     </div>
-                                    <div className="rounded-lg bg-gray-50 p-3 border border-gray-100">
-                                        <p className="text-gray-400">โควต้า</p>
-                                        <p className="font-semibold text-gray-900">
-                                            {lineQuota?.type === "unlimited"
-                                                ? "ไม่จำกัด"
-                                                : lineQuota?.value != null
-                                                    ? lineQuota.value.toLocaleString()
-                                                    : "-"}
-                                        </p>
+                                    <div className="p-2 bg-slate-50 rounded-lg">
+                                        <span className="text-[10px] text-slate-400 block">โควต้ารวม</span>
+                                        <span className="font-semibold text-slate-800 font-mono">
+                                            {lineQuota?.type === "unlimited" ? "∞" : lineQuota?.value?.toLocaleString() || "-"}
+                                        </span>
                                     </div>
-                                    <div className="rounded-lg bg-gray-50 p-3 border border-gray-100">
-                                        <p className="text-gray-400">ใช้ไปแล้ว</p>
-                                        <p className="font-semibold text-gray-900">
-                                            {lineQuota?.totalUsage != null ? lineQuota.totalUsage.toLocaleString() : "-"}
-                                        </p>
+                                    <div className="p-2 bg-slate-50 rounded-lg">
+                                        <span className="text-[10px] text-slate-400 block">ส่งไปแล้ว</span>
+                                        <span className="font-semibold text-slate-800 font-mono">
+                                            {lineQuota?.totalUsage?.toLocaleString() || "0"}
+                                        </span>
                                     </div>
-                                    <div className="rounded-lg bg-gray-50 p-3 border border-gray-100">
-                                        <p className="text-gray-400">คงเหลือ</p>
-                                        <p className="font-semibold text-gray-900">
+                                    <div className="p-2 bg-slate-50 rounded-lg">
+                                        <span className="text-[10px] text-slate-400 block">คงเหลือ</span>
+                                        <span className="font-semibold text-emerald-700 font-mono">
                                             {lineQuota?.type === "limited" && lineQuota?.value != null && lineQuota?.totalUsage != null
                                                 ? Math.max(0, lineQuota.value - lineQuota.totalUsage).toLocaleString()
-                                                : lineQuota?.type === "unlimited"
-                                                    ? "ไม่จำกัด"
-                                                    : "-"}
-                                        </p>
+                                                : "∞"}
+                                        </span>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
+                        {/* LINE Credentials & Admins */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3.5">
+                            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">การเชื่อมต่อ LINE Messaging API</h2>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Channel Access Token</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Channel Access Token</label>
                                     <input
                                         type="password"
                                         name="lineChannelAccessToken"
-                                        value={settings.lineChannelAccessToken}
+                                        value={settings.lineChannelAccessToken || ""}
                                         onChange={handleChange}
-                                        placeholder="••••••••"
-                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                        placeholder="••••••••••••••••"
+                                        className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Admin Group ID</label>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Admin Group ID (สำหรับแจ้งเตือนกลุ่ม)</label>
                                     <input
                                         type="text"
                                         name="lineAdminGroupId"
-                                        value={settings.lineAdminGroupId}
+                                        value={settings.lineAdminGroupId || ""}
                                         onChange={handleChange}
-                                        placeholder="Cxxxxxxx..."
-                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                        placeholder="Cxxxxxxxx..."
+                                        className="w-full px-3 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-slate-800 transition-colors"
                                     />
                                 </div>
-                                <div className="col-span-2">
-                                    <div className="flex items-center justify-between gap-3 mb-2">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-500">Admin Users</label>
-                                            <p className="text-[11px] text-gray-500">
-                                                กำหนดชื่อแอดมินและ LINE User ID แยกเป็นรายคน
-                                                {(settings.lineAdminUsers || []).filter(user => user.userId.trim()).length > 0
-                                                    ? ` ส่งหาแอดมิน ${(settings.lineAdminUsers || []).filter(user => user.userId.trim()).length} คน`
-                                                    : " ยังไม่ได้เพิ่มผู้รับแบบรายคน"}
-                                            </p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={addLineAdminUser}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-                                        >
-                                            <Plus size={12} />
-                                            เพิ่มแอดมิน
-                                        </button>
-                                    </div>
+                            </div>
 
-                                    <div className="space-y-2">
-                                        {(settings.lineAdminUsers || []).length === 0 && (
+                            {/* Admin Users list */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div>
+                                        <h3 className="text-xs font-semibold text-slate-800">รายชื่อแอดมินรับแจ้งเตือน (Line User ID)</h3>
+                                        <p className="text-[11px] text-slate-400">ส่งข้อความแจ้งเตือนตรงถึงแอดมินรายคน</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={addLineAdminUser}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md cursor-pointer transition-colors"
+                                    >
+                                        <Plus size={12} />
+                                        <span>เพิ่มแอดมิน</span>
+                                    </button>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    {(settings.lineAdminUsers || []).map((admin, idx) => (
+                                        <div key={admin.id} className="grid grid-cols-1 sm:grid-cols-[160px_1fr_auto] gap-2 items-center p-1.5 bg-slate-50 border border-slate-200/60 rounded-lg">
+                                            <input
+                                                type="text"
+                                                value={admin.name}
+                                                onChange={(e) => updateLineAdminUser(admin.id, "name", e.target.value)}
+                                                placeholder={`ชื่อแอดมิน ${idx + 1}`}
+                                                className="px-2.5 py-1 bg-white border border-slate-200 rounded text-xs font-medium text-slate-800 focus:outline-none focus:border-slate-800"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={admin.userId}
+                                                onChange={(e) => updateLineAdminUser(admin.id, "userId", e.target.value)}
+                                                placeholder="Uxxxxxxxx..."
+                                                className="px-2.5 py-1 bg-white border border-slate-200 rounded text-xs font-mono font-medium text-slate-800 focus:outline-none focus:border-slate-800"
+                                            />
                                             <button
                                                 type="button"
-                                                onClick={addLineAdminUser}
-                                                className="w-full px-3 py-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm font-medium text-gray-500 hover:bg-gray-100"
+                                                onClick={() => removeLineAdminUser(admin.id)}
+                                                className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
                                             >
-                                                เพิ่มแอดมินคนแรก
+                                                <Trash2 size={14} />
                                             </button>
-                                        )}
-                                        {(settings.lineAdminUsers || []).map((admin, index) => (
-                                            <div key={admin.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_auto] gap-2 rounded-lg border border-gray-200 bg-white p-2">
-                                                <input
-                                                    type="text"
-                                                    value={admin.name}
-                                                    onChange={(event) => updateLineAdminUser(admin.id, "name", event.target.value)}
-                                                    placeholder={`ชื่อแอดมิน ${index + 1}`}
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={admin.userId}
-                                                    onChange={(event) => updateLineAdminUser(admin.id, "userId", event.target.value)}
-                                                    placeholder="Uxxxxxxx..."
-                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeLineAdminUser(admin.id)}
-                                                    className="inline-flex items-center justify-center p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                                    aria-label={`ลบแอดมิน ${admin.name || index + 1}`}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        ))}
+                                        </div>
+                                    ))}
+
+                                    {(settings.lineAdminUsers || []).length === 0 && (
+                                        <p className="text-center py-3 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg">
+                                            ยังไม่มีแอดมินรายบุคคล สามารถกด &ldquo;เพิ่มแอดมิน&rdquo; เพื่อใส่ Line User ID
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Notification Event Toggles: 2 Clean Columns */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* แจ้งแอดมิน */}
+                            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-2.5">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 pb-1.5 border-b border-slate-100">
+                                    แจ้งเตือนผู้ดูแลระบบ (Admin)
+                                </h3>
+                                
+                                {[
+                                    { key: "lineNotifyAdminNewOrder", label: "เมื่อมีคำสั่งซื้อใหม่เข้ามา" },
+                                    { key: "lineNotifyAdminPayment", label: "เมื่อมีการแจ้งชำระเงิน / แนบสลิป" },
+                                    { key: "lineNotifyAdminOrder", label: "เมื่อมีการเปลี่ยนสถานะคำสั่งซื้อ" },
+                                    { key: "lineNotifyAdminCancelled", label: "เมื่อคำสั่งซื้อถูกยกเลิก" },
+                                ].map((item) => (
+                                    <label key={item.key} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer select-none transition-colors">
+                                        <span className="text-xs font-medium text-slate-700">{item.label}</span>
+                                        <span className="relative inline-flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                name={item.key}
+                                                checked={Boolean(settings[item.key as keyof StoreSettings])}
+                                                onChange={handleChange}
+                                                className="sr-only peer"
+                                            />
+                                            <span className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-slate-900"></span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* แจ้งลูกค้า */}
+                            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-2.5">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 pb-1.5 border-b border-slate-100">
+                                    แจ้งเตือนลูกค้า (Customer)
+                                </h3>
+
+                                {[
+                                    { key: "lineNotifyCustomerOrderSuccess", label: "แจ้งยืนยันการสั่งซื้อสำเร็จ" },
+                                    { key: "lineNotifyCustomerPaymentConfirmed", label: "แจ้งเมื่อตรวจสอบการชำระเงินเรียบร้อย" },
+                                    { key: "lineNotifyCustomerShipped", label: "แจ้งเลขพัสดุและจัดส่งสินค้าแล้ว" },
+                                    { key: "lineNotifyCustomerCancelled", label: "แจ้งเมื่อคำสั่งซื้อถูกยกเลิก" },
+                                ].map((item) => (
+                                    <label key={item.key} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer select-none transition-colors">
+                                        <span className="text-xs font-medium text-slate-700">{item.label}</span>
+                                        <span className="relative inline-flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                name={item.key}
+                                                checked={Boolean(settings[item.key as keyof StoreSettings])}
+                                                onChange={handleChange}
+                                                className="sr-only peer"
+                                            />
+                                            <span className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-slate-900"></span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB 6: ฐานข้อมูล & Storage (Firestore Usage) */}
+                {activeTab === 'firestore' && (
+                    <div className="space-y-4">
+                        {/* Storage Toggles */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-800">Storage รูปสินค้า</h3>
+                                    <p className="text-[11px] text-slate-500">เก็บไฟล์ภาพลง Cloud Storage แทน Base64</p>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="useStorageForProductImages"
+                                        checked={Boolean(settings.useStorageForProductImages)}
+                                        onChange={handleChange}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                </label>
+                            </div>
+
+                            <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-800">Storage รูปสลิป</h3>
+                                    <p className="text-[11px] text-slate-500">เก็บสลิปลง Cloud Storage สำหรับตรวจย้อนหลัง</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={checkStorageRules}
+                                        disabled={storageRuleCheck.status === "checking"}
+                                        className="px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded cursor-pointer transition-colors"
+                                    >
+                                        {storageRuleCheck.status === "checking" ? "ตรวจ..." : "ตรวจ Rules"}
+                                    </button>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            name="useStorageForPaymentSlips"
+                                            checked={Boolean(settings.useStorageForPaymentSlips)}
+                                            onChange={handleChange}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Usage Metrics Cards */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-800">ปริมาณการใช้งาน Firestore & Storage</h3>
+                                    <p className="text-[11px] text-slate-400">ดึงข้อมูลจริงจาก Google Cloud Monitoring (24 ชม. ล่าสุด)</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        fetchFirestoreUsage();
+                                        fetchStorageUsage();
+                                    }}
+                                    disabled={firestoreUsageLoading || storageUsageLoading}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer transition-colors"
+                                >
+                                    <RefreshCw size={12} className={firestoreUsageLoading || storageUsageLoading ? "animate-spin" : ""} />
+                                    <span>รีเฟรช</span>
+                                </button>
+                            </div>
+
+                            {storageUsageError && (
+                                <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-100">{storageUsageError}</p>
+                            )}
+
+                            {firestoreUsageError && (
+                                <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-100">{firestoreUsageError}</p>
+                            )}
+
+                            {storageUsage && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 block">Bucket</span>
+                                        <span className="font-semibold text-slate-800 font-mono truncate block">{storageUsage.bucketName || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 block">ขนาดใช้งาน</span>
+                                        <span className="font-semibold text-slate-800 font-mono">{formatBytes(storageUsage.metrics.storageBytes)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 block">จำนวนไฟล์</span>
+                                        <span className="font-semibold text-slate-800 font-mono">{storageUsage.metrics.objectCount != null ? storageUsage.metrics.objectCount.toLocaleString() : "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 block">Plan</span>
+                                        <span className="font-semibold text-slate-800 uppercase">{storageUsage.plan}</span>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            )}
 
-                        <div className="space-y-4">
-                            <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
-                                <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">แจ้งแอดมิน</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเมื่อมีออเดอร์ใหม่</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyAdminNewOrder"
-                                                checked={Boolean(settings.lineNotifyAdminNewOrder)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเมื่อมีการเปลี่ยนสถานะออเดอร์</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyAdminOrder"
-                                                checked={Boolean(settings.lineNotifyAdminOrder)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเตือนเมื่อมีการชำระเงิน</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyAdminPayment"
-                                                checked={Boolean(settings.lineNotifyAdminPayment)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเมื่อมีการยกเลิกออเดอร์</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyAdminCancelled"
-                                                checked={Boolean(settings.lineNotifyAdminCancelled)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
+                            {/* Storage space progress */}
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs text-slate-600 font-medium">
+                                    <span>พื้นที่จัดเก็บ Firestore: {formatBytes(firestoreUsage?.metrics?.storageBytes)}</span>
+                                    <span>{firestoreUsage?.percent?.storage != null ? `${firestoreUsage.percent.storage.toFixed(2)}%` : "N/A"}</span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-slate-800 rounded-full transition-all"
+                                        style={{ width: `${Math.min(100, Math.max(0, firestoreUsage?.percent?.storage || 0))}%` }}
+                                    />
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
-                                <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">แจ้งลูกค้า</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเตือนสั่งซื้อสำเร็จ</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyCustomerOrderSuccess"
-                                                checked={Boolean(settings.lineNotifyCustomerOrderSuccess)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
+                            {/* Daily Quota stats */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                                {[
+                                    { label: "Reads (24h)", val: firestoreUsage?.metrics?.reads24h, lim: firestoreUsage?.limits?.reads24h, pct: firestoreUsage?.percent?.reads24h },
+                                    { label: "Writes (24h)", val: firestoreUsage?.metrics?.writes24h, lim: firestoreUsage?.limits?.writes24h, pct: firestoreUsage?.percent?.writes24h },
+                                    { label: "Deletes (24h)", val: firestoreUsage?.metrics?.deletes24h, lim: firestoreUsage?.limits?.deletes24h, pct: firestoreUsage?.percent?.deletes24h },
+                                ].map((stat) => (
+                                    <div key={stat.label} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                                        <span className="text-[10px] text-slate-400 block">{stat.label}</span>
+                                        <span className="font-semibold text-slate-800 font-mono">
+                                            {stat.val != null ? stat.val.toLocaleString() : "-"}
                                         </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งยืนยันการชำระเงิน</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyCustomerPaymentConfirmed"
-                                                checked={Boolean(settings.lineNotifyCustomerPaymentConfirmed)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
+                                        <span className="text-[10px] text-slate-400"> / {stat.lim != null ? stat.lim.toLocaleString() : "ไม่จำกัด"}</span>
+                                        <div className="mt-1.5 w-full h-1 bg-white rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-slate-700 transition-all"
+                                                style={{ width: `${Math.min(100, Math.max(0, stat.pct || 0))}%` }}
                                             />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเมื่อจัดส่งสินค้า</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyCustomerShipped"
-                                                checked={Boolean(settings.lineNotifyCustomerShipped)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                    <label className="flex items-center justify-between gap-3 cursor-pointer group">
-                                        <span className="text-sm text-gray-700 group-hover:text-gray-900">แจ้งเมื่อมีการยกเลิกสินค้า</span>
-                                        <span className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                name="lineNotifyCustomerCancelled"
-                                                checked={Boolean(settings.lineNotifyCustomerCancelled)}
-                                                onChange={handleChange}
-                                                className="sr-only peer"
-                                            />
-                                            <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-900"></span>
-                                        </span>
-                                    </label>
-                                </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
+                        </div>
 
+                        {/* Clean Slip Cleanup Box */}
+                        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                                <Trash2 size={14} className="text-slate-500" />
+                                <span>ล้างสลิปและไฟล์เก่า (Cleanup Storage)</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                                ลบประวัติสลิปในคอลเลกชันและไฟล์ภาพที่เก่ากว่าช่วงเวลาที่ระบุเพื่อประหยัดพื้นที่
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {[1, 3, 6].map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => handleCleanupSlips(m as 1 | 3 | 6)}
+                                        disabled={slipCleanupLoadingMonth !== null}
+                                        className="px-3 py-1.5 bg-slate-50 hover:bg-red-50 hover:text-red-700 hover:border-red-200 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 cursor-pointer transition-colors disabled:opacity-50"
+                                    >
+                                        {slipCleanupLoadingMonth === m ? (
+                                            <span className="inline-flex items-center gap-1">
+                                                <Loader2 size={12} className="animate-spin" /> กำลังลบ...
+                                            </span>
+                                        ) : (
+                                            `เก่ากว่า ${m} เดือน`
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                            {slipCleanupMessage && (
+                                <p className="text-xs text-slate-700 bg-slate-50 p-2 rounded-md border border-slate-200 mt-2">{slipCleanupMessage}</p>
+                            )}
                         </div>
                     </div>
+                )}
+
+                {/* TAB 7: ดัชนี (Composite Indexes) */}
+                {activeTab === 'indexes' && (
+                    <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div>
+                                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">Firestore Composite Indexes</h2>
+                                <p className="text-[11px] text-slate-400">ตรวจสอบดัชนีที่จำเป็นเพื่อความเร็วในการค้นหาและจัดเรียง</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={fetchIndexChecks}
+                                disabled={indexCheckLoading}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800 cursor-pointer disabled:opacity-50"
+                            >
+                                <RefreshCw size={12} className={indexCheckLoading ? "animate-spin" : ""} />
+                                <span>ตรวจสอบดัชนี</span>
+                            </button>
+                        </div>
+
+                        {indexCheckError && (
+                            <p className="text-xs text-red-600 p-2 bg-red-50 rounded border border-red-100">{indexCheckError}</p>
+                        )}
+
+                        <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-lg overflow-hidden">
+                            {indexCheckLoading && indexCheckResults.length === 0 ? (
+                                <div className="py-8 text-center text-xs text-slate-400">
+                                    <Loader2 size={18} className="animate-spin mx-auto mb-1 text-slate-400" />
+                                    กำลังตรวจสอบ Composite Indexes...
+                                </div>
+                            ) : indexCheckResults.length === 0 ? (
+                                <div className="py-8 text-center text-xs text-slate-400">
+                                    กดปุ่ม &ldquo;ตรวจสอบดัชนี&rdquo; เพื่อตรวจสอบความพร้อมของระบบ
+                                </div>
+                            ) : (
+                                indexCheckResults.map((item) => (
+                                    <div key={item.id} className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs hover:bg-slate-50/50">
+                                        <div className="space-y-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                    item.status === 'ready'
+                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                        : item.status === 'missing'
+                                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                        : 'bg-red-50 text-red-700 border border-red-200'
+                                                }`}>
+                                                    {item.status === 'ready' ? 'พร้อม' : item.status === 'missing' ? 'ต้องสร้าง' : 'ผิดพลาด'}
+                                                </span>
+                                                <span className="font-mono font-bold text-slate-800">{item.collection}</span>
+                                                <span className="text-slate-500 font-medium">({item.title})</span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 font-mono">
+                                                ฟิลด์: {item.fields.join(", ")}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {item.status === "missing" && item.createUrl && (
+                                                <a
+                                                    href={item.createUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded cursor-pointer"
+                                                >
+                                                    <ExternalLink size={12} />
+                                                    <span>สร้าง Index</span>
+                                                </a>
+                                            )}
+                                            {item.status === "ready" && (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                                                    <CheckCircle2 size={13} />
+                                                    <span>สมบูรณ์</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {indexCheckedAt && (
+                            <p className="text-[10px] text-slate-400 text-right">
+                                ตรวจสอบล่าสุด: {new Date(indexCheckedAt).toLocaleString("th-TH")}
+                            </p>
+                        )}
                     </div>
-                </section>
                 )}
             </form>
         </div>
     );
 }
-
-

@@ -3,30 +3,30 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, increment, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import { Order, OrderItemStatus, OrderStatus } from "@/types/order";
+import { Order, OrderItem, OrderItemStatus, OrderStatus } from "@/types/order";
 import { PickupOption, StoreSettings } from "@/types/store";
 import { formatOrderId } from "@/lib/orderId";
 import { Search, Eye, Truck, CheckCircle, XCircle, Clock, Package, Trash2, X, ChevronLeft, ChevronRight, ShoppingBag, Loader2, User, MapPin, CreditCard, RotateCcw, CircleAlert, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 
-const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    pending: { label: "รอชำระ", color: "text-amber-700", bg: "bg-amber-50", icon: <Clock size={12} /> },
-    paid: { label: "ชำระแล้ว", color: "text-blue-700", bg: "bg-blue-50", icon: <CreditCard size={12} /> },
-    shipped: { label: "จัดส่งแล้ว", color: "text-purple-700", bg: "bg-purple-50", icon: <Truck size={12} /> },
-    completed: { label: "สำเร็จ", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    cancelled: { label: "ยกเลิก", color: "text-red-700", bg: "bg-red-50", icon: <XCircle size={12} /> },
-    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", icon: <RotateCcw size={12} /> },
+const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; badge: string; icon: React.ReactNode }> = {
+    pending: { label: "รอชำระ", color: "text-amber-700", bg: "bg-amber-50", badge: "bg-amber-50 text-amber-700 border-amber-200/60", icon: <Clock size={11} className="text-amber-600" /> },
+    paid: { label: "ชำระแล้ว", color: "text-blue-700", bg: "bg-blue-50", badge: "bg-blue-50 text-blue-700 border-blue-200/60", icon: <CreditCard size={11} className="text-blue-600" /> },
+    shipped: { label: "จัดส่งแล้ว", color: "text-purple-700", bg: "bg-purple-50", badge: "bg-purple-50 text-purple-700 border-purple-200/60", icon: <Truck size={11} className="text-purple-600" /> },
+    completed: { label: "สำเร็จ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <CheckCircle size={11} className="text-emerald-600" /> },
+    cancelled: { label: "ยกเลิก", color: "text-rose-700", bg: "bg-rose-50", badge: "bg-rose-50 text-rose-700 border-rose-200/60", icon: <XCircle size={11} className="text-rose-600" /> },
+    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", badge: "bg-orange-50 text-orange-700 border-orange-200/60", icon: <RotateCcw size={11} className="text-orange-600" /> },
 };
 
-const itemStatusConfig: Record<OrderItemStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    processing: { label: "ดำเนินการ", color: "text-blue-700", bg: "bg-blue-50", icon: <Clock size={12} /> },
-    ready: { label: "พร้อมรับ", color: "text-emerald-700", bg: "bg-emerald-50", icon: <Package size={12} /> },
-    received: { label: "รับแล้ว", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    shipped: { label: "จัดส่ง", color: "text-purple-700", bg: "bg-purple-50", icon: <Truck size={12} /> },
-    completed: { label: "สำเร็จ", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    cancelled: { label: "ยกเลิก", color: "text-red-700", bg: "bg-red-50", icon: <XCircle size={12} /> },
-    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", icon: <RotateCcw size={12} /> },
+const itemStatusConfig: Record<OrderItemStatus, { label: string; color: string; bg: string; badge: string; icon: React.ReactNode }> = {
+    processing: { label: "ดำเนินการ", color: "text-blue-700", bg: "bg-blue-50", badge: "bg-blue-50 text-blue-700 border-blue-200/60", icon: <Clock size={10} /> },
+    ready: { label: "พร้อมรับ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <Package size={10} /> },
+    received: { label: "รับแล้ว", color: "text-green-700", bg: "bg-green-50", badge: "bg-green-50 text-green-700 border-green-200/60", icon: <CheckCircle size={10} /> },
+    shipped: { label: "จัดส่ง", color: "text-purple-700", bg: "bg-purple-50", badge: "bg-purple-50 text-purple-700 border-purple-200/60", icon: <Truck size={10} /> },
+    completed: { label: "สำเร็จ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <CheckCircle size={10} /> },
+    cancelled: { label: "ยกเลิก", color: "text-rose-700", bg: "bg-rose-50", badge: "bg-rose-50 text-rose-700 border-rose-200/60", icon: <XCircle size={10} /> },
+    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", badge: "bg-orange-50 text-orange-700 border-orange-200/60", icon: <RotateCcw size={10} /> },
 };
 
 const selectableItemStatuses: OrderItemStatus[] = [
@@ -84,7 +84,7 @@ function cleanForFirestore<T>(obj: T): T {
             .map(item => cleanForFirestore(item)) as unknown as T;
     }
     if (typeof obj === "object" && !(obj instanceof Date)) {
-        const cleaned: Record<string, any> = {};
+        const cleaned: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(obj)) {
             if (value !== undefined) {
                 cleaned[key] = cleanForFirestore(value);
@@ -395,7 +395,7 @@ export default function AdminOrdersPage() {
 
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = {
+            const updatedItem: OrderItem = {
                 ...item,
                 status
             };
@@ -423,9 +423,10 @@ export default function AdminOrdersPage() {
                 ...prev,
                 items: safeItems
             } : prev);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
             console.error("Error updating item status:", error);
-            alert(`เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้า: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้า: ${errorMsg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -442,7 +443,7 @@ export default function AdminOrdersPage() {
 
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = { ...item };
+            const updatedItem: OrderItem = { ...item };
             if (item.bundleItems && Array.isArray(item.bundleItems)) {
                 updatedItem.bundleItems = item.bundleItems.map((bundleItem, bundleIndex) => (
                     bundleIndex === bundleItemIndex ? applyPickupOption({ ...bundleItem, status }, status, pickupOptions) : bundleItem
@@ -466,9 +467,10 @@ export default function AdminOrdersPage() {
                 ...prev,
                 items: safeItems
             } : prev);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
             console.error("Error updating bundle item status:", error);
-            alert(`เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้าในเซต: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้าในเซต: ${errorMsg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -481,7 +483,7 @@ export default function AdminOrdersPage() {
 
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = {
+            const updatedItem: OrderItem = {
                 ...item,
                 status: "ready" as OrderItemStatus,
                 pickupOptionId: pickupOption.id,
@@ -511,9 +513,10 @@ export default function AdminOrdersPage() {
                 updatedAt: serverTimestamp()
             });
             setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, items: safeItems } : prev);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
             console.error("Error updating item pickup:", error);
-            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาด: ${errorMsg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -531,7 +534,7 @@ export default function AdminOrdersPage() {
 
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = { ...item };
+            const updatedItem: OrderItem = { ...item };
             if (item.bundleItems && Array.isArray(item.bundleItems)) {
                 updatedItem.bundleItems = item.bundleItems.map((bundleItem, bundleIndex) => (
                     bundleIndex === bundleItemIndex
@@ -559,9 +562,10 @@ export default function AdminOrdersPage() {
                 updatedAt: serverTimestamp()
             });
             setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, items: safeItems } : prev);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
             console.error("Error updating bundle pickup:", error);
-            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาด: ${errorMsg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -684,9 +688,13 @@ export default function AdminOrdersPage() {
             let comparison = 0;
 
             if (sortBy === 'createdAt') {
-                const getMs = (val: any) => {
+                const getMs = (val: unknown) => {
                     if (val instanceof Date) return val.getTime();
-                    if (val && typeof val.toDate === 'function') return val.toDate().getTime();
+                    if (val && typeof val === 'object' && 'toDate' in val && typeof (val as { toDate?: unknown }).toDate === 'function') {
+                        return (val as { toDate: () => Date }).toDate().getTime();
+                    }
+                    if (typeof val === 'number') return val;
+                    if (typeof val === 'string') return new Date(val).getTime();
                     return 0;
                 };
                 comparison = getMs(a.createdAt) - getMs(b.createdAt);
@@ -713,6 +721,8 @@ export default function AdminOrdersPage() {
         pending: orders.filter(o => o.status === 'pending').length,
         paid: orders.filter(o => o.status === 'paid').length,
         shipped: orders.filter(o => o.status === 'shipped').length,
+        completed: orders.filter(o => o.status === 'completed').length,
+        cancelled: orders.filter(o => o.status === 'cancelled').length,
         returned: orders.filter(o => o.status === 'returned').length,
     }), [orders]);
 
@@ -749,188 +759,325 @@ export default function AdminOrdersPage() {
     const refundTotal = refundSummary.reduce((sum, entry) => sum + entry.amount, 0);
 
     return (
-        <div className="max-w-7xl mx-auto space-y-4">
-            {/* Header */}
-            <div className="flex justify-between items-center">
+        <div className="max-w-7xl mx-auto space-y-3.5 pb-10 font-sans antialiased text-slate-800">
+            {/* Header: Clean & Compact */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-1 border-b border-slate-200/60">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">คำสั่งซื้อ</h1>
-                    <p className="text-sm text-gray-500">{stats.total} รายการ</p>
+                    <h1 className="text-lg font-bold tracking-tight text-slate-900">คำสั่งซื้อ</h1>
+                    <p className="text-xs text-slate-500 mt-0.5">จัดการคำสั่งซื้อ ตรวจสอบสถานะ และติดตามการจัดส่ง</p>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs font-mono font-medium text-slate-700">
+                        <ShoppingBag size={13} className="text-slate-400" />
+                        ทั้งหมด {stats.total.toLocaleString()} รายการ
+                    </span>
                 </div>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-4 gap-3">
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
-                        <ShoppingBag size={14} /> ทั้งหมด
+            {/* KPI Stat Cards (5 Compact Cards) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                <button
+                    type="button"
+                    onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        filterStatus === 'all'
+                            ? 'bg-white border-slate-900 ring-1 ring-slate-900 shadow-2xs'
+                            : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-2xs'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>ออเดอร์ทั้งหมด</span>
+                        <ShoppingBag size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-lg font-bold text-gray-900">{stats.total}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-amber-600 text-xs mb-1">
-                        <Clock size={14} /> รอชำระ
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-slate-900">
+                        {stats.total.toLocaleString()}
+                        <span className="text-xs font-normal text-slate-400 ml-1">รายการ</span>
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => { setFilterStatus('pending'); setCurrentPage(1); }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        filterStatus === 'pending'
+                            ? 'bg-amber-50/50 border-amber-600 ring-1 ring-amber-600 shadow-2xs'
+                            : 'bg-white border-slate-200/80 hover:border-amber-200 shadow-2xs'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-[11px] text-amber-700 font-semibold mb-1">
+                        <span>รอชำระเงิน</span>
+                        <Clock size={13} className="text-amber-500" />
                     </div>
-                    <p className="text-lg font-bold text-amber-600">{stats.pending}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-blue-600 text-xs mb-1">
-                        <CreditCard size={14} /> ชำระแล้ว
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-amber-700">
+                        {stats.pending.toLocaleString()}
+                        <span className="text-xs font-normal text-amber-600/70 ml-1">รายการ</span>
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => { setFilterStatus('paid'); setCurrentPage(1); }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        filterStatus === 'paid'
+                            ? 'bg-blue-50/50 border-blue-600 ring-1 ring-blue-600 shadow-2xs'
+                            : 'bg-white border-slate-200/80 hover:border-blue-200 shadow-2xs'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-[11px] text-blue-700 font-semibold mb-1">
+                        <span>ชำระเงินแล้ว</span>
+                        <CreditCard size={13} className="text-blue-500" />
                     </div>
-                    <p className="text-lg font-bold text-blue-600">{stats.paid}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-purple-600 text-xs mb-1">
-                        <Truck size={14} /> จัดส่งแล้ว
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-blue-700">
+                        {stats.paid.toLocaleString()}
+                        <span className="text-xs font-normal text-blue-600/70 ml-1">รายการ</span>
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => { setFilterStatus('shipped'); setCurrentPage(1); }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        filterStatus === 'shipped'
+                            ? 'bg-purple-50/50 border-purple-600 ring-1 ring-purple-600 shadow-2xs'
+                            : 'bg-white border-slate-200/80 hover:border-purple-200 shadow-2xs'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-[11px] text-purple-700 font-semibold mb-1">
+                        <span>จัดส่งแล้ว</span>
+                        <Truck size={13} className="text-purple-500" />
                     </div>
-                    <p className="text-lg font-bold text-purple-600">{stats.shipped}</p>
-                </div>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-purple-700">
+                        {stats.shipped.toLocaleString()}
+                        <span className="text-xs font-normal text-purple-600/70 ml-1">รายการ</span>
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => { setFilterStatus('completed'); setCurrentPage(1); }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer col-span-2 sm:col-span-1 ${
+                        filterStatus === 'completed'
+                            ? 'bg-emerald-50/50 border-emerald-600 ring-1 ring-emerald-600 shadow-2xs'
+                            : 'bg-white border-slate-200/80 hover:border-emerald-200 shadow-2xs'
+                    }`}
+                >
+                    <div className="flex items-center justify-between text-[11px] text-emerald-700 font-semibold mb-1">
+                        <span>สำเร็จแล้ว</span>
+                        <CheckCircle size={13} className="text-emerald-500" />
+                    </div>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-emerald-700">
+                        {stats.completed.toLocaleString()}
+                        <span className="text-xs font-normal text-emerald-600/70 ml-1">รายการ</span>
+                    </p>
+                </button>
             </div>
 
-            {/* Filter & Search */}
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-                <div className="flex flex-col md:flex-row gap-3 items-center">
-                    <div className="relative flex-1 w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            {/* Filter Toolbar (Clean Horizontal Strip) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-2.5 shadow-2xs space-y-2.5">
+                <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
+                    {/* Search Input */}
+                    <div className="relative w-full sm:max-w-md">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                         <input
                             type="text"
-                            placeholder="ค้นหาเลขสั่งซื้อ, ชื่อ, เบอร์โทร..."
-                            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                            placeholder="ค้นหาเลขที่ออเดอร์, ชื่อลูกค้า, เบอร์โทร..."
+                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50/70 border border-slate-200/80 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-slate-400 focus:bg-white transition-all"
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
+                        {searchTerm && (
+                            <button
+                                type="button"
+                                onClick={() => { setSearchTerm(""); setCurrentPage(1); }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
                     </div>
-                    <div className="flex gap-1 flex-wrap">
-                        <button
-                            onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                        >
-                            ทั้งหมด
-                        </button>
-                        {Object.entries(statusConfig).map(([status, config]) => (
+
+                    <div className="text-[11px] text-slate-400 font-mono w-full sm:w-auto text-right">
+                        พบ {filteredOrders.length.toLocaleString()} ออเดอร์
+                    </div>
+                </div>
+
+                {/* Segmented Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
+                    <button
+                        type="button"
+                        onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                            filterStatus === 'all'
+                                ? 'bg-slate-900 text-white shadow-2xs'
+                                : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/70'
+                        }`}
+                    >
+                        <span>ทั้งหมด</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${filterStatus === 'all' ? 'bg-white/20 text-white' : 'bg-white text-slate-600'}`}>
+                            {stats.total}
+                        </span>
+                    </button>
+
+                    {Object.entries(statusConfig).map(([status, config]) => {
+                        const count = stats[status as keyof typeof stats] ?? 0;
+                        const isActive = filterStatus === status;
+                        return (
                             <button
                                 key={status}
+                                type="button"
                                 onClick={() => { setFilterStatus(status as OrderStatus); setCurrentPage(1); }}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterStatus === status ? `${config.bg} ${config.color}` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                                    isActive
+                                        ? 'bg-slate-900 text-white shadow-2xs'
+                                        : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/70'
+                                }`}
                             >
-                                {config.label}
+                                <span>{config.label}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-600'}`}>
+                                    {count}
+                                </span>
                             </button>
-                        ))}
-                    </div>
+                        );
+                    })}
                 </div>
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
                 {isLoading ? (
-                    <div className="p-8 text-center text-gray-500">
-                        <Loader2 className="animate-spin mx-auto mb-2" size={24} />
-                        <p className="text-sm">กำลังโหลด...</p>
+                    <div className="p-10 text-center text-slate-400">
+                        <Loader2 className="animate-spin mx-auto mb-2 text-slate-400" size={22} />
+                        <p className="text-xs">กำลังโหลดคำสั่งซื้อ...</p>
                     </div>
                 ) : filteredOrders.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                        <ShoppingBag size={40} className="mx-auto mb-3 text-gray-300" />
-                        <p>ไม่พบคำสั่งซื้อ</p>
+                    <div className="p-10 text-center text-slate-400">
+                        <ShoppingBag size={36} className="mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs font-medium text-slate-600">ไม่พบคำสั่งซื้อ</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะ</p>
                     </div>
                 ) : (
                     <>
                         {/* Table Header */}
-                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2.5 bg-gray-50 text-xs font-semibold text-gray-600 border-b border-gray-200 select-none">
+                        <div className="hidden md:grid grid-cols-12 gap-2 px-3.5 py-2.5 bg-slate-50/80 text-[11px] font-semibold text-slate-500 border-b border-slate-100 select-none">
                             <button
+                                type="button"
                                 onClick={() => handleSort('id')}
-                                className="col-span-2 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                                className="col-span-2 flex items-center hover:text-slate-900 text-left font-semibold group focus:outline-none cursor-pointer"
                             >
-                                เลขที่ <SortIcon field="id" />
+                                เลขที่ออเดอร์ <SortIcon field="id" />
                             </button>
                             <button
+                                type="button"
                                 onClick={() => handleSort('customerName')}
-                                className="col-span-3 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                                className="col-span-3 flex items-center hover:text-slate-900 text-left font-semibold group focus:outline-none cursor-pointer"
                             >
                                 ลูกค้า <SortIcon field="customerName" />
                             </button>
+                            <div className="col-span-2 text-left font-semibold">
+                                รายการสินค้า
+                            </div>
                             <button
+                                type="button"
                                 onClick={() => handleSort('createdAt')}
-                                className="col-span-2 flex items-center hover:text-gray-900 text-left font-semibold group focus:outline-none"
+                                className="col-span-2 flex items-center hover:text-slate-900 text-left font-semibold group focus:outline-none cursor-pointer"
                             >
-                                วันที่ <SortIcon field="createdAt" />
+                                วันที่สั่งซื้อ <SortIcon field="createdAt" />
                             </button>
                             <button
+                                type="button"
                                 onClick={() => handleSort('totalAmount')}
-                                className="col-span-2 flex items-center justify-end hover:text-gray-900 text-right font-semibold group focus:outline-none w-full"
+                                className="col-span-1 flex items-center justify-end hover:text-slate-900 text-right font-semibold group focus:outline-none w-full cursor-pointer"
                             >
                                 ยอดรวม <SortIcon field="totalAmount" />
                             </button>
                             <button
+                                type="button"
                                 onClick={() => handleSort('status')}
-                                className="col-span-1 flex items-center justify-center hover:text-gray-900 text-center font-semibold group focus:outline-none w-full"
+                                className="col-span-1 flex items-center justify-center hover:text-slate-900 text-center font-semibold group focus:outline-none w-full cursor-pointer"
                             >
                                 สถานะ <SortIcon field="status" />
                             </button>
-                            <div className="col-span-2 text-right">จัดการ</div>
+                            <div className="col-span-1 text-right font-semibold">จัดการ</div>
                         </div>
 
                         {/* Table Body */}
-                        <div className="divide-y divide-gray-200">
+                        <div className="divide-y divide-slate-100">
                             {paginatedOrders.map((order) => {
                                 const status = statusConfig[order.status];
                                 const customerIssueCount = getCustomerIssueCount(order);
+                                const totalQty = (order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
                                 return (
                                     <div
                                         key={order.id}
-                                        className="grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors"
+                                        className="grid grid-cols-12 gap-2 px-3.5 py-2.5 items-center hover:bg-slate-50/70 cursor-pointer transition-colors group text-xs"
                                         onClick={() => router.push(`/orders/${order.id}`)}
                                     >
                                         {/* Order ID */}
-                                        <div className="col-span-6 md:col-span-2">
-                                            <span className="font-mono text-xs text-gray-400">{formatOrderId(order, 8)}</span>
+                                        <div className="col-span-6 md:col-span-2 min-w-0">
+                                            <span className="font-mono font-bold text-xs text-slate-800 group-hover:text-blue-600 transition-colors">
+                                                {formatOrderId(order, 10)}
+                                            </span>
+                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5 md:hidden">
+                                                {format(order.createdAt as Date, 'd MMM yy HH:mm', { locale: th })}
+                                            </p>
                                         </div>
 
                                         {/* Customer */}
-                                        <div className="hidden md:block col-span-3">
-                                            <p className="font-medium text-sm text-gray-900 truncate">{order.customerName}</p>
-                                            <p className="text-xs text-gray-400">{order.customerPhone}</p>
-                                            {order.items && order.items.length > 0 && (
-                                                <div className="mt-1.5 space-y-1">
-                                                    {order.items.map((item, idx) => {
-                                                        const itemStatus = item.status && itemStatusConfig[item.status];
-                                                        return (
-                                                            <div key={idx} className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                                                <span className="truncate max-w-[120px]" title={item.productName}>
-                                                                    {item.productName}
-                                                                </span>
-                                                                {itemStatus && (
-                                                                    <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold ${itemStatus.bg} ${itemStatus.color}`}>
-                                                                        {itemStatus.label}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
+                                        <div className="hidden md:block col-span-3 min-w-0">
+                                            <p className="font-semibold text-xs text-slate-900 truncate">{order.customerName}</p>
+                                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono mt-0.5">
+                                                <span>{order.customerPhone || "-"}</span>
+                                                {getOrderLineName(order) && (
+                                                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1 py-0.2 rounded font-sans truncate max-w-[90px]">
+                                                        LINE: {getOrderLineName(order)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Items preview */}
+                                        <div className="hidden md:block col-span-2 min-w-0">
+                                            {order.items && order.items.length > 0 ? (
+                                                <div className="space-y-0.5">
+                                                    {order.items.slice(0, 2).map((item, idx) => (
+                                                        <p key={idx} className="text-[11px] text-slate-600 truncate max-w-[170px]" title={item.productName}>
+                                                            {item.productName} <span className="text-slate-400 font-mono">x{item.quantity}</span>
+                                                        </p>
+                                                    ))}
+                                                    {order.items.length > 2 && (
+                                                        <span className="text-[10px] text-slate-400 font-medium">
+                                                            +{order.items.length - 2} รายการอื่น
+                                                        </span>
+                                                    )}
                                                 </div>
+                                            ) : (
+                                                <span className="text-[11px] text-slate-400">-</span>
                                             )}
                                         </div>
 
                                         {/* Date */}
                                         <div className="hidden md:block col-span-2">
-                                            <span className="text-sm text-gray-600">
-                                                {format(order.createdAt as Date, 'd MMM yy', { locale: th })}
+                                            <span className="text-[11px] text-slate-500 font-medium">
+                                                {format(order.createdAt as Date, 'd MMM yy HH:mm', { locale: th })}
                                             </span>
                                         </div>
 
                                         {/* Amount */}
-                                        <div className="col-span-3 md:col-span-2 text-right">
-                                            <span className="font-bold text-sm text-gray-900">฿{order.totalAmount.toLocaleString()}</span>
+                                        <div className="col-span-3 md:col-span-1 text-right">
+                                            <span className="font-mono font-bold text-xs text-slate-900">฿{order.totalAmount.toLocaleString()}</span>
+                                            <p className="text-[10px] text-slate-400 font-mono">{totalQty} ชิ้น</p>
                                         </div>
 
                                         {/* Status */}
                                         <div className="hidden md:flex col-span-1 justify-center">
                                             <div className="flex flex-col items-center gap-1">
-                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.color}`}>
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${status.badge}`}>
                                                     {status.icon}
                                                     {status.label}
                                                 </span>
                                                 {customerIssueCount > 0 && (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                                                        <CircleAlert size={11} />
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-200/60 px-1.5 py-0.2 text-[9px] font-semibold text-orange-700">
+                                                        <CircleAlert size={10} />
                                                         แจ้งปัญหา {customerIssueCount}
                                                     </span>
                                                 )}
@@ -938,31 +1085,42 @@ export default function AdminOrdersPage() {
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="col-span-3 md:col-span-2 flex items-center justify-end gap-1">
+                                        <div className="col-span-3 md:col-span-1 flex items-center justify-end gap-1">
                                             <button
+                                                type="button"
                                                 onClick={(e) => { e.stopPropagation(); router.push(`/orders/${order.id}`); }}
-                                                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
+                                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                                                title="ดูรายละเอียดคำสั่งซื้อ"
                                             >
-                                                <Eye size={14} />
+                                                <Eye size={13} />
                                             </button>
                                             <button
+                                                type="button"
                                                 onClick={(e) => { e.stopPropagation(); openDeleteConfirm(order); }}
-                                                className="p-2 hover:bg-red-50 rounded-lg text-red-500"
+                                                className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                                title="ลบคำสั่งซื้อ"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={13} />
                                             </button>
                                         </div>
 
                                         {/* Mobile Info */}
-                                        <div className="col-span-12 md:hidden flex items-center gap-3 text-xs text-gray-500">
-                                            <span>{order.customerName}</span>
-                                            <span className={`px-2 py-0.5 rounded-full font-semibold ${status.bg} ${status.color}`}>{status.label}</span>
-                                            {customerIssueCount > 0 && (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 font-semibold text-orange-700">
-                                                    <CircleAlert size={11} />
-                                                    แจ้งปัญหา {customerIssueCount}
+                                        <div className="col-span-12 md:hidden flex items-center justify-between pt-1 border-t border-slate-100/60 text-[11px] text-slate-500">
+                                            <div className="truncate max-w-[200px]">
+                                                <span>{order.customerName}</span>
+                                                {order.customerPhone && <span className="ml-1 text-slate-400">({order.customerPhone})</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${status.badge}`}>
+                                                    {status.label}
                                                 </span>
-                                            )}
+                                                {customerIssueCount > 0 && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-1.5 py-0.2 text-[9px] font-semibold text-orange-700">
+                                                        <CircleAlert size={9} />
+                                                        {customerIssueCount}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -970,20 +1128,20 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* Pagination */}
-                        <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
-                            <div className="flex flex-wrap items-center gap-3 text-gray-500">
-                                <span>
-                                    {pageStart}-{pageEnd} จาก {filteredOrders.length}
+                        <div className="flex flex-col gap-2.5 border-t border-slate-100 px-3.5 py-2.5 text-xs md:flex-row md:items-center md:justify-between bg-slate-50/50">
+                            <div className="flex flex-wrap items-center gap-3 text-slate-500">
+                                <span className="text-[11px] font-mono">
+                                    แสดง {pageStart}-{pageEnd} จาก {filteredOrders.length}
                                 </span>
-                                <label className="flex items-center gap-2">
-                                    <span className="text-xs">แสดง</span>
+                                <label className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-slate-400">แสดงหน้าละ</span>
                                     <select
                                         value={itemsPerPage}
                                         onChange={(e) => {
                                             setItemsPerPage(Number(e.target.value));
                                             setCurrentPage(1);
                                         }}
-                                        className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-gray-200"
+                                        className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer focus:border-slate-400"
                                     >
                                         {[10, 15, 25, 50].map((value) => (
                                             <option key={value} value={value}>
@@ -991,40 +1149,44 @@ export default function AdminOrdersPage() {
                                             </option>
                                         ))}
                                     </select>
-                                    <span className="text-xs">รายการ</span>
+                                    <span className="text-[11px] text-slate-400">รายการ</span>
                                 </label>
                             </div>
 
                             <div className="flex items-center justify-between gap-1 md:justify-end">
                                 <button
+                                    type="button"
                                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                     disabled={currentPage === 1}
-                                    className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                    className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer transition-colors"
                                     aria-label="Previous page"
                                 >
-                                    <ChevronLeft size={18} />
+                                    <ChevronLeft size={15} />
                                 </button>
                                 <div className="flex items-center gap-1">
                                     {visiblePages.map((page) => (
                                         <button
                                             key={page}
+                                            type="button"
                                             onClick={() => setCurrentPage(page)}
-                                            className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold transition-colors ${currentPage === page
-                                                ? 'bg-gray-900 text-white'
-                                                : 'text-gray-600 hover:bg-gray-100'
-                                                }`}
+                                            className={`h-7 min-w-7 rounded-md px-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                                currentPage === page
+                                                    ? 'bg-slate-900 text-white shadow-2xs'
+                                                    : 'text-slate-600 hover:bg-slate-200/60'
+                                            }`}
                                         >
                                             {page}
                                         </button>
                                     ))}
                                 </div>
                                 <button
+                                    type="button"
                                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                     disabled={currentPage === totalPages}
-                                    className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                    className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer transition-colors"
                                     aria-label="Next page"
                                 >
-                                    <ChevronRight size={18} />
+                                    <ChevronRight size={15} />
                                 </button>
                             </div>
                         </div>
@@ -1349,7 +1511,7 @@ export default function AdminOrdersPage() {
                                                 <span className="text-sm font-bold text-orange-700">฿{refundTotal.toLocaleString()}</span>
                                             </div>
                                             <div className="divide-y divide-orange-50">
-                                                {refundSummary.map(({ name, detail, item, status, amount, unitPrice, quantity }, idx) => (
+                                                {refundSummary.map(({ name, detail, item, status, amount }, idx) => (
                                                     <div key={`${name}-${idx}`} className="flex items-start justify-between gap-3 px-4 py-3">
                                                         <div className="min-w-0">
                                                             <div className="flex flex-wrap items-center gap-2">
@@ -1589,30 +1751,32 @@ export default function AdminOrdersPage() {
             )}
 
             {isCancelConfirmOpen && cancelTarget && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                    <div className="bg-white w-full sm:max-w-md sm:rounded-xl rounded-t-xl overflow-hidden shadow-2xl">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                            <h3 className="font-semibold text-gray-900 text-sm">ยืนยันการยกเลิก</h3>
-                            <button onClick={closeCancelConfirm} className="p-1 hover:bg-gray-100 rounded">
-                                <X size={18} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+                    <div className="bg-white w-full max-w-sm rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in duration-150">
+                        <div className="px-4.5 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="font-bold text-sm text-slate-900">ยืนยันการยกเลิก</h3>
+                            <button onClick={closeCancelConfirm} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
+                                <X size={15} />
                             </button>
                         </div>
-                        <div className="p-5 bg-[#F8F9FA] space-y-2">
-                            <p className="text-sm text-gray-700">
-                                ต้องการยกเลิกคำสั่งซื้อ {formatOrderId(cancelTarget, 8)} ใช่หรือไม่?
+                        <div className="p-4 space-y-2 text-xs">
+                            <p className="text-slate-700">
+                                ต้องการยกเลิกคำสั่งซื้อ <span className="font-mono font-bold text-slate-900">{formatOrderId(cancelTarget, 10)}</span> ใช่หรือไม่?
                             </p>
                         </div>
-                        <div className="p-4 border-t border-gray-100 bg-white flex gap-3">
+                        <div className="px-4.5 py-3 bg-slate-50/60 border-t border-slate-100 flex gap-2 justify-end">
                             <button
+                                type="button"
                                 onClick={closeCancelConfirm}
-                                className="flex-1 px-4 py-2.5 bg-white text-gray-700 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                                className="px-3 py-1.5 border border-slate-200 bg-white text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
                                 disabled={updatingOrderId === cancelTarget.id}
                             >
                                 ปิด
                             </button>
                             <button
+                                type="button"
                                 onClick={confirmCancelOrder}
-                                className="flex-1 px-4 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
+                                className="px-3.5 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded-lg hover:bg-rose-700 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
                                 disabled={updatingOrderId === cancelTarget.id}
                             >
                                 ยืนยันยกเลิก
@@ -1623,31 +1787,35 @@ export default function AdminOrdersPage() {
             )}
 
             {isDeleteConfirmOpen && deleteTarget && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                    <div className="bg-white w-full sm:max-w-md sm:rounded-xl rounded-t-xl overflow-hidden shadow-2xl">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                            <h3 className="font-semibold text-gray-900 text-sm">ลบคำสั่งซื้อ</h3>
-                            <button onClick={closeDeleteConfirm} className="p-1 hover:bg-gray-100 rounded">
-                                <X size={18} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+                    <div className="bg-white w-full max-w-sm rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in duration-150">
+                        <div className="px-4.5 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="font-bold text-sm text-slate-900">ยืนยันการลบคำสั่งซื้อ</h3>
+                            <button onClick={closeDeleteConfirm} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
+                                <X size={15} />
                             </button>
                         </div>
-                        <div className="p-5 bg-[#F8F9FA] space-y-2">
-                            <p className="text-sm text-gray-700">
-                                ต้องการลบคำสั่งซื้อ {formatOrderId(deleteTarget, 8)} ใช่หรือไม่?
+                        <div className="p-4 space-y-2 text-xs">
+                            <p className="text-slate-700">
+                                ต้องการลบคำสั่งซื้อ <span className="font-mono font-bold text-slate-900">{formatOrderId(deleteTarget, 10)}</span> ใช่หรือไม่?
                             </p>
-                            <p className="text-xs text-red-600">ลบแล้วไม่สามารถกู้คืนได้</p>
+                            <p className="text-[11px] text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200/60">
+                                ข้อมูลคำสั่งซื้อและประวัติที่เกี่ยวข้องจะถูกลบถาวร ไม่สามารถกู้คืนได้
+                            </p>
                         </div>
-                        <div className="p-4 border-t border-gray-100 bg-white flex gap-3">
+                        <div className="px-4.5 py-3 bg-slate-50/60 border-t border-slate-100 flex gap-2 justify-end">
                             <button
+                                type="button"
                                 onClick={closeDeleteConfirm}
-                                className="flex-1 px-4 py-2.5 bg-white text-gray-700 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                                className="px-3 py-1.5 border border-slate-200 bg-white text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
                                 disabled={deletingOrderId === deleteTarget.id}
                             >
                                 ปิด
                             </button>
                             <button
+                                type="button"
                                 onClick={confirmDeleteOrder}
-                                className="flex-1 px-4 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
+                                className="px-3.5 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded-lg hover:bg-rose-700 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
                                 disabled={deletingOrderId === deleteTarget.id}
                             >
                                 {deletingOrderId === deleteTarget.id ? "กำลังลบ..." : "ยืนยันลบ"}

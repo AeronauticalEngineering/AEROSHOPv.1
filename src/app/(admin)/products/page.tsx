@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm, useFieldArray, type Resolver } from "react-hook-form";
@@ -804,811 +804,950 @@ export default function AdminProductsPage() {
     const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
-        <div className="max-w-7xl mx-auto space-y-4">
+        <div className="mx-auto max-w-7xl space-y-3.5">
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900">
-                        {isModalOpen ? (editingProduct ? "แก้ไขสินค้า" : "เพิ่มสินค้าใหม่") : "สินค้า"}
-                    </h1>
-                    {isModalOpen && (
-                        <p className="mt-1 text-xs text-gray-500">จัดการข้อมูลสินค้า ราคา สต็อก ตัวเลือก และสินค้าเซต</p>
-                    )}
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-sm font-bold tracking-tight text-slate-800 sm:text-base">
+                            {isModalOpen ? (editingProduct ? "แก้ไขสินค้า" : "เพิ่มสินค้าใหม่") : "จัดการสินค้า"}
+                        </h1>
+                        {!isModalOpen && (
+                            <span className="rounded-md border border-slate-200/80 bg-slate-100/80 px-2 py-0.5 font-mono text-xs font-bold text-slate-700">
+                                {products.length} รายการ
+                            </span>
+                        )}
+                        {isModalOpen && editingProduct && (
+                            <span className="max-w-[200px] truncate rounded-md border border-slate-200/80 bg-slate-100/80 px-2 py-0.5 font-mono text-xs text-slate-600">
+                                {editingProduct.sku ? `#${editingProduct.sku}` : editingProduct.name}
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                        {isModalOpen
+                            ? "กำหนดข้อมูลสินค้า ราคา สต็อก ตัวเลือก และสินค้าเซต"
+                            : "รายการสินค้าทั้งหมด ตรวจสอบสต็อก และกำหนดราคาขาย"}
+                    </p>
                 </div>
+
                 {isModalOpen ? (
                     <button
                         type="button"
                         onClick={closeModal}
-                        className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg font-semibold text-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50"
                     >
-                        <ChevronLeft size={16} />
-                        กลับไปหน้าสินค้า
+                        <ChevronLeft size={14} />
+                        กลับไปหน้ารายการสินค้า
                     </button>
                 ) : (
                     <button
+                        type="button"
                         onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 text-xs font-medium text-white shadow-xs transition hover:bg-slate-800"
                     >
-                        <Plus size={16} />
-                        เพิ่มสินค้า
+                        <Plus size={14} />
+                        เพิ่มสินค้าใหม่
                     </button>
                 )}
             </div>
 
             {!isModalOpen && (
                 <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
-                        <Package size={14} /> สินค้าทั้งหมด
-                    </div>
-                    <p className="text-lg font-bold text-gray-900">{productStats.total.toLocaleString()}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-green-600 text-xs mb-1">
-                        <CheckCircle size={14} /> เปิดขาย
-                    </div>
-                    <p className="text-lg font-bold text-green-600">{productStats.activeProducts.toLocaleString()}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-blue-600 text-xs mb-1">
-                        <Layers size={14} /> เซต / มีตัวเลือก
-                    </div>
-                    <p className="text-lg font-bold text-blue-600">{productStats.bundleProducts.toLocaleString()} / {productStats.variantProducts.toLocaleString()}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 text-amber-600 text-xs mb-1">
-                        <AlertTriangle size={14} /> สต็อกต้องดูแล
-                    </div>
-                    <p className="text-lg font-bold text-amber-600">{productStats.stockWarning.toLocaleString()}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                        หมด {productStats.outOfStock} · ใกล้หมด {productStats.lowStock}
-                    </p>
-                </div>
-            </div>
-
-            {/* Search & Filters */}
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_240px]">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <input
-                            type="text"
-                            placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า..."
-                            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
-                            value={searchTerm}
-                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                        />
-                    </div>
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                    >
-                        <option value="all">ทุกหมวดหมู่</option>
-                        {categoryOptions.map((category) => (
-                            <option key={category} value={category}>
-                                {category}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                {isLoading ? (
-                    <div className="p-8 text-center text-gray-500">
-                        <Loader2 className="animate-spin mx-auto mb-2" size={24} />
-                        <p className="text-sm">กำลังโหลด...</p>
-                    </div>
-                ) : filteredProducts.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                        <Box size={40} className="mx-auto mb-3 text-gray-300" />
-                        <p>ยังไม่มีสินค้า</p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Table Header */}
-                        <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 border-b">
-                            <div className="col-span-4">สินค้า</div>
-                            <div className="col-span-2">หมวดหมู่</div>
-                            <div className="col-span-2 text-right">ราคา</div>
-                            <div className="col-span-2 text-center">สต็อก</div>
-                            <div className="col-span-2 text-right">จัดการ</div>
-                        </div>
-
-                        {/* Table Body */}
-                        <div className="divide-y divide-gray-50">
-                            {paginatedProducts.map((product) => {
-                                const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]?.map((image) => image.base64));
-                                const displayStock = getProductDisplayStock(product);
-                                return (
-                                <div
-                                    key={product.id}
-                                    onClick={() => openEditModal(product)}
-                                    className="grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors"
-                                >
-                                    {/* Product Info */}
-                                    <div className="col-span-8 md:col-span-4 flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200">
-                                            {primaryImage ? (
-                                                <img src={primaryImage} alt="" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <ImageIcon size={16} className="text-gray-400" />
-                                            )}
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="font-semibold text-sm text-gray-900 truncate">{product.name}</p>
-                                            {product.sku && (
-                                                <p className="text-[11px] text-gray-400 font-mono truncate">รหัส: {product.sku}</p>
-                                            )}
-                                            {product.hasVariants && (
-                                                <p className="text-xs text-gray-400 flex items-center gap-1">
-                                                    <Layers size={10} />
-                                                    {product.variants?.length || 0} แบบ
-                                                </p>
-                                            )}
-                                            {product.productType === "bundle" && (
-                                                <p className="text-xs text-blue-500 flex items-center gap-1">
-                                                    <Package size={10} />
-                                                    เซต {product.bundleItems?.length || 0} รายการ
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Category */}
-                                    <div className="hidden md:block col-span-2">
-                                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{product.category}</span>
-                                    </div>
-
-                                    {/* Price */}
-                                    <div className="hidden md:block col-span-2 text-right">
-                                        <span className="font-semibold text-sm text-gray-900">฿{product.price.toLocaleString()}</span>
-                                    </div>
-
-                                    {/* Stock */}
-                                    <div className="hidden md:block col-span-2 text-center">
-                                        <span className={`font-bold text-sm ${displayStock === 0 ? 'text-red-500' : 'text-gray-900'}`}>
-                                            {displayStock.toLocaleString()}{product.productType === "bundle" ? " เซต" : ""}
-                                        </span>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-1">
-                                        <span className={`text-xs px-2 py-1 rounded font-semibold ${product.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                            {product.isActive ? 'ขาย' : 'ปิด'}
-                                        </span>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); openEditModal(product); }}
-                                            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
-                                        >
-                                            <Pencil size={14} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => openDeleteConfirm(product, e)}
-                                            className="p-2 hover:bg-red-50 rounded-lg text-red-500"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-
-                                    {/* Mobile Info */}
-                                    <div className="col-span-12 md:hidden flex items-center gap-4 text-xs text-gray-500">
-                                        {product.sku && <span className="font-mono">รหัส: {product.sku}</span>}
-                                        <span>{product.category}</span>
-                                        <span className="font-bold text-gray-900">฿{product.price.toLocaleString()}</span>
-                                        <span>สต็อก: {displayStock.toLocaleString()}{product.productType === "bundle" ? " เซต" : ""}</span>
-                                    </div>
-                                </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
-                                <span className="text-gray-500">
-                                    {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredProducts.length)} จาก {filteredProducts.length}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-                                    >
-                                        <ChevronLeft size={18} />
-                                    </button>
-                                    <span className="px-3 py-1">{currentPage} / {totalPages}</span>
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-                                    >
-                                        <ChevronRight size={18} />
-                                    </button>
+                    {/* Summary KPI Cards */}
+                    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+                        {/* Total */}
+                        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:border-slate-300/80">
+                            <div className="mb-1.5 flex items-center justify-between text-slate-400">
+                                <span className="text-[11px] font-medium text-slate-500">สินค้าทั้งหมด</span>
+                                <div className="rounded-md bg-slate-100 p-1 text-slate-600">
+                                    <Package size={13} />
                                 </div>
                             </div>
+                            <p className="font-mono text-xl font-bold text-slate-900">{productStats.total.toLocaleString()}</p>
+                            <p className="mt-0.5 text-[10px] text-slate-400">รวมทุกหมวดหมู่ในระบบ</p>
+                        </div>
+
+                        {/* Active */}
+                        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:border-slate-300/80">
+                            <div className="mb-1.5 flex items-center justify-between text-slate-400">
+                                <span className="text-[11px] font-medium text-slate-500">เปิดขายอยู่</span>
+                                <div className="rounded-md border border-emerald-100 bg-emerald-50 p-1 text-emerald-600">
+                                    <CheckCircle size={13} />
+                                </div>
+                            </div>
+                            <p className="font-mono text-xl font-bold text-emerald-700">{productStats.activeProducts.toLocaleString()}</p>
+                            <p className="mt-0.5 text-[10px] text-emerald-600/80">พร้อมให้ลูกค้าสั่งซื้อ</p>
+                        </div>
+
+                        {/* Bundles & Variants */}
+                        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:border-slate-300/80">
+                            <div className="mb-1.5 flex items-center justify-between text-slate-400">
+                                <span className="text-[11px] font-medium text-slate-500">เซต / มีตัวเลือก</span>
+                                <div className="rounded-md border border-blue-100 bg-blue-50 p-1 text-blue-600">
+                                    <Layers size={13} />
+                                </div>
+                            </div>
+                            <p className="font-mono text-xl font-bold text-blue-700">
+                                {productStats.bundleProducts.toLocaleString()} <span className="text-xs font-normal text-slate-400">/</span> {productStats.variantProducts.toLocaleString()}
+                            </p>
+                            <p className="mt-0.5 text-[10px] text-slate-400">เซต {productStats.bundleProducts} · มีตัวเลือก {productStats.variantProducts}</p>
+                        </div>
+
+                        {/* Stock Warning */}
+                        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:border-slate-300/80">
+                            <div className="mb-1.5 flex items-center justify-between text-slate-400">
+                                <span className="text-[11px] font-medium text-slate-500">สต็อกต้องดูแล</span>
+                                <div className="rounded-md border border-amber-100 bg-amber-50 p-1 text-amber-600">
+                                    <AlertTriangle size={13} />
+                                </div>
+                            </div>
+                            <p className="font-mono text-xl font-bold text-amber-700">{productStats.stockWarning.toLocaleString()}</p>
+                            <p className="mt-0.5 text-[10px] text-amber-700/80">
+                                หมด <span className="font-bold text-rose-600">{productStats.outOfStock}</span> · ใกล้หมด {productStats.lowStock}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Search & Filters Toolbar */}
+                    <div className="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-xs sm:flex-row sm:items-center">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชื่อสินค้า / รหัสสินค้า (SKU)..."
+                                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50/60 pl-8 pr-7 text-xs text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-1 focus:ring-slate-300"
+                                value={searchTerm}
+                                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                            />
+                            {searchTerm && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchTerm("")}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                        <select
+                            value={selectedCategory}
+                            onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 text-xs font-medium text-slate-700 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-1 focus:ring-slate-300 sm:w-56"
+                        >
+                            <option value="all">ทุกหมวดหมู่ ({products.length})</option>
+                            {categoryOptions.map((category) => (
+                                <option key={category} value={category}>
+                                    {category}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Products Table Card */}
+                    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+                        {isLoading ? (
+                            <div className="flex min-h-[30vh] flex-col items-center justify-center gap-2 p-8 text-slate-400">
+                                <Loader2 className="animate-spin text-slate-500" size={24} />
+                                <p className="text-xs font-medium text-slate-500">กำลังโหลดรายการสินค้า...</p>
+                            </div>
+                        ) : filteredProducts.length === 0 ? (
+                            <div className="p-12 text-center text-slate-400">
+                                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                                    <Box size={22} />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-700">ไม่พบสินค้า</p>
+                                <p className="mt-1 text-xs text-slate-400">
+                                    {searchTerm || selectedCategory !== "all"
+                                        ? "ลองเปลี่ยนคำค้นหาหรือตัวกรองหมวดหมู่"
+                                        : "ยังไม่มีสินค้าในระบบ เริ่มต้นเพิ่มสินค้าชิ้นแรกของคุณ"}
+                                </p>
+                                {(searchTerm || selectedCategory !== "all") && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSearchTerm(""); setSelectedCategory("all"); }}
+                                        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                                    >
+                                        ล้างการค้นหา
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                {/* Table Header */}
+                                <div className="hidden md:grid grid-cols-12 gap-2 border-b border-slate-200/70 bg-slate-50/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                                    <div className="col-span-5">สินค้า</div>
+                                    <div className="col-span-2">หมวดหมู่</div>
+                                    <div className="col-span-2 text-right">ราคา</div>
+                                    <div className="col-span-1 text-center">สต็อก</div>
+                                    <div className="col-span-2 text-right">สถานะ / จัดการ</div>
+                                </div>
+
+                                {/* Table Rows */}
+                                <div className="divide-y divide-slate-100">
+                                    {paginatedProducts.map((product) => {
+                                        const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]?.map((image) => image.base64));
+                                        const displayStock = getProductDisplayStock(product);
+                                        const isOutOfStock = displayStock === 0;
+                                        return (
+                                            <div
+                                                key={product.id}
+                                                onClick={() => openEditModal(product)}
+                                                className="group grid grid-cols-12 items-center gap-2 px-4 py-3 transition hover:bg-slate-50/60 cursor-pointer"
+                                            >
+                                                {/* Product Info */}
+                                                <div className="col-span-8 md:col-span-5 flex items-center gap-3 min-w-0">
+                                                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-200/80 bg-slate-100 flex items-center justify-center">
+                                                        {primaryImage ? (
+                                                            <img src={primaryImage} alt="" className="h-full w-full object-cover" />
+                                                        ) : (
+                                                            <ImageIcon size={16} className="text-slate-400" />
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-xs font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                                                            {product.name}
+                                                        </p>
+                                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                                            {product.sku && (
+                                                                <span className="font-mono text-[10px] text-slate-400">
+                                                                    {product.sku}
+                                                                </span>
+                                                            )}
+                                                            {product.hasVariants && (
+                                                                <span className="inline-flex items-center gap-0.5 rounded border border-slate-200/60 bg-slate-100/70 px-1.5 py-0.2 text-[10px] font-medium text-slate-600">
+                                                                    <Layers size={9} />
+                                                                    {product.variants?.length || 0} แบบ
+                                                                </span>
+                                                            )}
+                                                            {product.productType === "bundle" && (
+                                                                <span className="inline-flex items-center gap-0.5 rounded border border-blue-200/60 bg-blue-50 px-1.5 py-0.2 text-[10px] font-medium text-blue-700">
+                                                                    <Package size={9} />
+                                                                    เซต {product.bundleItems?.length || 0} รายการ
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Category */}
+                                                <div className="hidden md:block col-span-2">
+                                                    <span className="inline-block truncate max-w-full rounded border border-slate-200/60 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                                        {product.category}
+                                                    </span>
+                                                </div>
+
+                                                {/* Price */}
+                                                <div className="hidden md:block col-span-2 text-right">
+                                                    <span className="font-mono text-xs font-bold text-slate-900">
+                                                        ฿{product.price.toLocaleString()}
+                                                    </span>
+                                                </div>
+
+                                                {/* Stock */}
+                                                <div className="hidden md:block col-span-1 text-center">
+                                                    <span className={`inline-block font-mono text-xs font-semibold ${
+                                                        isOutOfStock
+                                                            ? "rounded border border-rose-200/60 bg-rose-50 px-1.5 py-0.5 text-rose-600"
+                                                            : displayStock <= 5
+                                                                ? "rounded border border-amber-200/60 bg-amber-50 px-1.5 py-0.5 text-amber-700"
+                                                                : "text-slate-800"
+                                                    }`}>
+                                                        {displayStock.toLocaleString()}{product.productType === "bundle" ? " เซต" : ""}
+                                                    </span>
+                                                </div>
+
+                                                {/* Actions & Status */}
+                                                <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-1.5">
+                                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                                        product.isActive
+                                                            ? "border-emerald-200/60 bg-emerald-50 text-emerald-700"
+                                                            : "border-slate-200/60 bg-slate-100 text-slate-500"
+                                                    }`}>
+                                                        {product.isActive ? "เปิดขาย" : "ปิด"}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); openEditModal(product); }}
+                                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                                        title="แก้ไข"
+                                                    >
+                                                        <Pencil size={13} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => openDeleteConfirm(product, e)}
+                                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                        title="ลบ"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                </div>
+
+                                                {/* Mobile Info Fallback */}
+                                                <div className="col-span-12 md:hidden flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-[11px] text-slate-500">
+                                                    <span>หมวด: {product.category}</span>
+                                                    <span className="font-mono font-bold text-slate-900">฿{product.price.toLocaleString()}</span>
+                                                    <span>สต็อก: {displayStock.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Pagination Footer */}
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-between border-t border-slate-200/70 bg-slate-50/50 px-4 py-2.5 text-xs text-slate-500">
+                                        <span>
+                                            แสดง {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, filteredProducts.length)} จาก {filteredProducts.length} รายการ
+                                        </span>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                disabled={currentPage === 1}
+                                                className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-30"
+                                            >
+                                                <ChevronLeft size={13} />
+                                                ก่อนหน้า
+                                            </button>
+                                            <span className="px-2 font-mono text-xs font-semibold text-slate-700">
+                                                {currentPage} / {totalPages}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                disabled={currentPage === totalPages}
+                                                className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-30"
+                                            >
+                                                ถัดไป
+                                                <ChevronRight size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
-                    </>
-                )}
-            </div>
+                    </div>
                 </>
             )}
 
             {/* Product Form */}
             {isModalOpen && (
-                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-b border-gray-100">
-                            <span className="font-semibold text-sm text-gray-900">
+                <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
+                    {/* Form Header */}
+                    <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/70 px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white text-xs">
+                                {editingProduct ? <Pencil size={12} /> : <Plus size={12} />}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-900">
                                 {editingProduct ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}
                             </span>
-                            <button onClick={closeModal} className="p-1 hover:bg-gray-200 rounded">
-                                <X size={18} />
-                            </button>
+                            {editingProduct && (
+                                <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-500">
+                                    ID: {editingProduct.id.slice(0, 8)}...
+                                </span>
+                            )}
                         </div>
+                        <button
+                            type="button"
+                            onClick={closeModal}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        >
+                            <X size={15} />
+                        </button>
+                    </div>
 
-                        <div className="p-4">
-                            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    {/* Left: Basic Info */}
-                                    <div className="space-y-4">
-                                        <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                                            <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                                                <Box size={16} className="text-gray-500" />
-                                                <span className="font-semibold text-sm text-gray-900">ข้อมูลสินค้า</span>
+                    <div className="p-4 sm:p-5">
+                        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {/* Left Column: Basic Info */}
+                                <div className="space-y-4">
+                                    <section className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
+                                        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50/70 border-b border-slate-200/70">
+                                            <Box size={14} className="text-slate-500" />
+                                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">ข้อมูลสินค้า</span>
+                                        </div>
+                                        <div className="p-3.5 space-y-3">
+                                            {/* Name */}
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                                    ชื่อสินค้า <span className="text-rose-500">*</span>
+                                                </label>
+                                                <input
+                                                    {...register("name")}
+                                                    placeholder="เช่น เสื้อยืด Aero Classic"
+                                                    className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                />
+                                                {errors.name && <p className="text-rose-500 text-[11px] mt-1">{errors.name.message}</p>}
                                             </div>
-                                            <div className="p-4 space-y-3">
+
+                                            {/* SKU & Product Type */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อสินค้า *</label>
-                                                    <input
-                                                        {...register("name")}
-                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                    />
-                                                    {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">รหัสสินค้า</label>
+                                                    <label className="block text-[11px] font-medium text-slate-600 mb-1">รหัสสินค้า (SKU)</label>
                                                     <input
                                                         {...register("sku")}
                                                         placeholder="เช่น AERO-001"
-                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                        className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">ประเภทสินค้า</label>
-                                                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-1">
-                                                        <label className={`cursor-pointer rounded-md px-3 py-2 text-center text-xs font-bold transition-colors ${!isBundle ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                                                    <label className="block text-[11px] font-medium text-slate-600 mb-1">ประเภทสินค้า</label>
+                                                    <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-0.5 border border-slate-200/60 h-8 items-center">
+                                                        <label className={`flex items-center justify-center h-7 cursor-pointer rounded-md text-[11px] transition-all ${
+                                                            !isBundle ? "bg-white text-slate-900 font-semibold shadow-2xs" : "text-slate-500 font-medium hover:text-slate-700"
+                                                        }`}>
                                                             <input type="radio" value="single" {...register("productType")} className="sr-only" />
                                                             สินค้าปกติ
                                                         </label>
-                                                        <label className={`cursor-pointer rounded-md px-3 py-2 text-center text-xs font-bold transition-colors ${isBundle ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                                                        <label className={`flex items-center justify-center h-7 cursor-pointer rounded-md text-[11px] transition-all ${
+                                                            isBundle ? "bg-white text-slate-900 font-semibold shadow-2xs" : "text-slate-500 font-medium hover:text-slate-700"
+                                                        }`}>
                                                             <input type="radio" value="bundle" {...register("productType")} className="sr-only" />
                                                             สินค้าเซต
                                                         </label>
                                                     </div>
                                                 </div>
-                                                <div className="grid grid-cols-1 gap-3">
-                                                    <div>
-                                                        <label className="block text-xs font-semibold text-gray-500 mb-1">หมวดหมู่ *</label>
-                                                        <select
-                                                            {...register("category")}
-                                                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                        >
-                                                            <option value="">เลือกหมวดหมู่</option>
-                                                            {activeCategoryOptions.map((category) => (
-                                                                <option key={category} value={category}>
-                                                                    {category}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        {activeCategoryOptions.length === 0 && (
-                                                            <p className="mt-1 text-[11px] text-amber-600">
-                                                                กรุณาสร้างหมวดหมู่ที่หน้าเมนูหมวดหมู่ก่อนเพิ่มสินค้า
-                                                            </p>
-                                                        )}
-                                                        {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category.message}</p>}
-                                                    </div>
+                                            </div>
+
+                                            {/* Category */}
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                                    หมวดหมู่ <span className="text-rose-500">*</span>
+                                                </label>
+                                                <select
+                                                    {...register("category")}
+                                                    className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                >
+                                                    <option value="">เลือกหมวดหมู่</option>
+                                                    {activeCategoryOptions.map((category) => (
+                                                        <option key={category} value={category}>
+                                                            {category}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {activeCategoryOptions.length === 0 && (
+                                                    <p className="mt-1 text-[11px] text-amber-600">
+                                                        กรุณาสร้างหมวดหมู่ที่หน้าเมนูหมวดหมู่ก่อนเพิ่มสินค้า
+                                                    </p>
+                                                )}
+                                                {errors.category && <p className="text-rose-500 text-[11px] mt-1">{errors.category.message}</p>}
+                                            </div>
+
+                                            {/* Image URLs */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <label className="text-[11px] font-medium text-slate-600">ลิงก์รูปภาพ (URLs)</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => appendImageUrl({ url: "" })}
+                                                        className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition"
+                                                    >
+                                                        <Plus size={11} />
+                                                        เพิ่มลิงก์
+                                                    </button>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">ลิงก์รูปภาพ (หลายรูป)</label>
-                                                    <div className="space-y-2">
-                                                        {imageUrlFields.length === 0 ? (
-                                                            <p className="text-[11px] text-gray-400">ยังไม่มีลิงก์รูปภาพ</p>
-                                                        ) : (
-                                                            imageUrlFields.map((field, index) => (
-                                                                <div key={field.id} className="flex items-center gap-2">
-                                                                    <input
-                                                                        {...register(`imageUrls.${index}.url`)}
-                                                                        placeholder="https://..."
-                                                                        className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                                    />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => removeImageUrl(index)}
-                                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                                                                    >
-                                                                        <X size={14} />
-                                                                    </button>
-                                                                </div>
-                                                            ))
-                                                        )}
+                                                <div className="space-y-1.5">
+                                                    {imageUrlFields.length === 0 ? (
+                                                        <p className="text-[11px] text-slate-400 italic">ยังไม่มีลิงก์รูปภาพ</p>
+                                                    ) : (
+                                                        imageUrlFields.map((field, index) => (
+                                                            <div key={field.id} className="flex items-center gap-1.5">
+                                                                <input
+                                                                    {...register(`imageUrls.${index}.url`)}
+                                                                    placeholder="https://..."
+                                                                    className="flex-1 h-7.5 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeImageUrl(index)}
+                                                                    className="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                                >
+                                                                    <X size={13} />
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-1">ลิงก์แรกจะถูกใช้เป็นภาพปกหลัก</p>
+                                            </div>
+
+                                            {/* File Upload & Storage */}
+                                            <div className="pt-1 border-t border-slate-100">
+                                                <label className="block text-[11px] font-medium text-slate-600 mb-1.5">
+                                                    อัปโหลดไฟล์รูปภาพ ({useStorageForProductImages ? "Firebase Storage" : "Base64"})
+                                                </label>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <label
+                                                        htmlFor="product-image-files"
+                                                        className="inline-flex h-7.5 items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition"
+                                                    >
+                                                        <Upload size={12} className="text-slate-500" />
+                                                        เลือกรูปภาพ
+                                                    </label>
+                                                    <input
+                                                        id="product-image-files"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        multiple
+                                                        onChange={handleImageFilesChange}
+                                                        className="hidden"
+                                                    />
+                                                    {imageFiles.length > 0 && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => appendImageUrl({ url: "" })}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                                                            onClick={clearImageSelection}
+                                                            className="inline-flex h-7.5 items-center gap-1 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-xs font-medium text-rose-600 hover:bg-rose-100 transition"
                                                         >
-                                                            <Plus size={12} />
-                                                            เพิ่มลิงก์รูปภาพ
+                                                            <X size={12} />
+                                                            ล้าง ({imageFiles.length})
                                                         </button>
-                                                    </div>
-                                                    <p className="text-[10px] text-gray-400 mt-1">ลิงก์แรกจะเป็นรูปหลักของสินค้า</p>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">
-                                                        อัปโหลดรูปภาพ ({useStorageForProductImages ? "เก็บใน Firebase Storage" : "เก็บ Base64 แยก"})
-                                                    </label>
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <label
-                                                            htmlFor="product-image-files"
-                                                            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                                                        >
-                                                            <Upload size={14} />
-                                                            เลือกรูปภาพ
-                                                        </label>
-                                                        <input
-                                                            id="product-image-files"
-                                                            type="file"
-                                                            accept="image/*"
-                                                            multiple
-                                                            onChange={handleImageFilesChange}
-                                                            className="hidden"
-                                                        />
-                                                        {imageFiles.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={clearImageSelection}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100"
-                                                            >
-                                                                <X size={12} />
-                                                                ล้างไฟล์
-                                                            </button>
-                                                        )}
-                                                        {imageFiles.length > 0 && (
-                                                            <span className="text-xs text-gray-500">{imageFiles.length} ไฟล์</span>
-                                                        )}
-                                                    </div>
-                                                    {imageFileError && <p className="text-[11px] text-red-500 mt-1">{imageFileError}</p>}
-                                                    {savedBase64Images.length > 0 && (
-                                                        <div className="mt-3">
-                                                            <p className="mb-1 text-[11px] font-semibold text-gray-500">รูปที่อัปโหลดแล้ว</p>
-                                                            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                                                                {savedBase64Images.map((image) => (
-                                                                    <div key={image.id} className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                                                                        <img src={image.base64} alt="" className="h-14 w-full object-cover" />
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => removeSavedBase64Image(image.id)}
-                                                                            disabled={deletingImageId === image.id}
-                                                                            className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:text-red-500 disabled:opacity-50"
-                                                                            aria-label="ลบรูปภาพ"
-                                                                        >
-                                                                            {deletingImageId === image.id ? (
-                                                                                <Loader2 size={12} className="animate-spin" />
-                                                                            ) : (
-                                                                                <X size={12} />
-                                                                            )}
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
                                                     )}
-                                                    {imagePreviews.length > 0 && (
-                                                        <div className="mt-3 grid grid-cols-4 gap-2">
-                                                            {imagePreviews.map((src, index) => (
-                                                                <div key={`${src}-${index}`} className="relative border border-gray-200 rounded-lg overflow-hidden">
-                                                                    <img src={src} alt="" className="w-full h-16 object-cover" />
+                                                </div>
+                                                {imageFileError && <p className="text-[11px] text-rose-500 mt-1">{imageFileError}</p>}
+
+                                                {/* Saved Base64 Images */}
+                                                {savedBase64Images.length > 0 && (
+                                                    <div className="mt-2.5">
+                                                        <p className="mb-1 text-[11px] font-medium text-slate-500">รูปที่บันทึกไว้ในระบบ</p>
+                                                        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                                                            {savedBase64Images.map((image) => (
+                                                                <div key={image.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                                                    <img src={image.base64} alt="" className="h-12 w-full object-cover" />
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => removeImageFile(index)}
-                                                                        className="absolute top-1 right-1 bg-white/90 text-gray-600 hover:text-red-500 rounded-full p-1 shadow"
+                                                                        onClick={() => removeSavedBase64Image(image.id)}
+                                                                        disabled={deletingImageId === image.id}
+                                                                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-xs hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 transition"
+                                                                        aria-label="ลบรูปภาพ"
                                                                     >
-                                                                        <X size={12} />
+                                                                        {deletingImageId === image.id ? (
+                                                                            <Loader2 size={10} className="animate-spin" />
+                                                                        ) : (
+                                                                            <X size={11} />
+                                                                        )}
                                                                     </button>
                                                                 </div>
                                                             ))}
                                                         </div>
-                                                    )}
-                                                    <p className="text-[10px] text-gray-400 mt-1">
-                                                        {useStorageForProductImages
-                                                            ? "ไฟล์ใหม่จะถูกอัปโหลดไป Firebase Storage และบันทึก URL ในสินค้า"
-                                                            : "ไฟล์จะถูกเก็บแยกใน collection สำหรับ Base64"}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">รายละเอียด</label>
-                                                    <textarea
-                                                        {...register("description")}
-                                                        rows={3}
-                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 resize-y min-h-[60px]"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">คำแนะนำสินค้า</label>
-                                                    <select
-                                                        {...register("guideId")}
-                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                    >
-                                                        <option value="">ไม่ใช้คำแนะนำ</option>
-                                                        {productGuides
-                                                            .filter((guide) => guide.isActive !== false || guide.id === editingProduct?.guideId)
-                                                            .map((guide) => (
-                                                                <option key={guide.id} value={guide.id}>
-                                                                    {guide.title}
-                                                                </option>
-                                                            ))}
-                                                    </select>
-                                                    <p className="mt-1 text-[11px] text-gray-400">สร้างและจัดการคำแนะนำได้ที่หน้าหมวดหมู่ แล้วเลือกใช้กับสินค้า</p>
-                                                </div>
-                                                <div className="flex items-center justify-between pt-2">
-                                                    <span className="text-sm text-gray-700">เปิดขาย</span>
-                                                    <input type="checkbox" {...register("isActive")} className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900/20" />
-                                                </div>
-                                            </div>
-                                        </section>
-                                    </div>
+                                                    </div>
+                                                )}
 
-                                    {/* Right: Stock & Variants */}
-                                    <div className="space-y-4">
-                                        <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                                            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
-                                                <div className="flex items-center gap-3">
-                                                    <Layers size={16} className="text-gray-500" />
-                                                    <span className="font-semibold text-sm text-gray-900">ราคาและสต็อก</span>
-                                                </div>
-                                                {!isBundle && (
-                                                    <label className="flex items-center gap-2 text-xs cursor-pointer">
-                                                        <span className="text-gray-500">มีหลายแบบ</span>
-                                                        <input type="checkbox" {...register("hasVariants")} className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900/20" />
-                                                    </label>
+                                                {/* Local Previews */}
+                                                {imagePreviews.length > 0 && (
+                                                    <div className="mt-2.5 grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                                                        {imagePreviews.map((src, index) => (
+                                                            <div key={`${src}-${index}`} className="relative rounded-lg border border-slate-200 bg-slate-100 overflow-hidden">
+                                                                <img src={src} alt="" className="h-12 w-full object-cover" />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeImageFile(index)}
+                                                                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-xs hover:bg-rose-50 hover:text-rose-600 transition"
+                                                                >
+                                                                    <X size={11} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 )}
                                             </div>
-                                            <div className="p-4">
-                                                {isBundle ? (
-                                                    <div className="space-y-4">
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-gray-500 mb-1">ราคาขายเซต (บาท)</label>
-                                                                <input
-                                                                    type="number"
-                                                                    {...register("price")}
-                                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-gray-500 mb-1">สต็อกเซต</label>
-                                                                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-bold text-gray-900">
-                                                                    {bundleAvailableStock.toLocaleString()} เซต
-                                                                </div>
-                                                                <p className="mt-1 text-[11px] text-gray-400">คำนวณจากสินค้าย่อยที่เหลือน้อยที่สุด</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                                                            ราคาสินค้าแยกรวม ฿{bundleRegularPrice.toLocaleString()}
-                                                            {bundleRegularPrice > Number(watchedPrice || 0) && (
-                                                                <span className="ml-2 font-bold">ประหยัด ฿{(bundleRegularPrice - Number(watchedPrice || 0)).toLocaleString()}</span>
-                                                            )}
-                                                        </div>
 
-                                                        <div className="flex items-center justify-between">
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-gray-900">สินค้าในเซต</p>
-                                                                <p className="text-xs text-gray-400">เลือกสินค้าหลายตัว และเลือกตัวเลือกของแต่ละสินค้าได้</p>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => appendBundleItem({ id: generateId(), productId: "", productName: "", variantId: "", variantName: "", quantity: 1, unitPrice: 0 })}
-                                                                className="px-3 py-1.5 bg-gray-900 text-white text-xs font-semibold rounded-lg hover:bg-gray-800 flex items-center gap-1"
-                                                            >
-                                                                <Plus size={12} />
-                                                                เพิ่มสินค้า
-                                                            </button>
-                                                        </div>
+                                            {/* Description */}
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-600 mb-1">รายละเอียดสินค้า</label>
+                                                <textarea
+                                                    {...register("description")}
+                                                    rows={3}
+                                                    placeholder="รายละเอียด ขนาด วัสดุ คุณสมบัติ..."
+                                                    className="w-full px-2.5 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition resize-y min-h-[60px]"
+                                                />
+                                            </div>
 
-                                                        {bundleItemFields.length === 0 ? (
-                                                            <div className="p-6 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-center">
-                                                                <Package size={32} className="mx-auto mb-2 text-gray-300" />
-                                                                <p className="text-sm text-gray-400">ยังไม่มีสินค้าในเซต</p>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="space-y-3">
-                                                                {bundleItemFields.map((field, index) => {
-                                                                    const item = watchedBundleItems?.[index];
-                                                                    const selectedProduct = getBundleProduct(item?.productId);
-                                                                    const selectedStock = item ? getBundleItemStock(item) : 0;
-                                                                    return (
-                                                                        <div key={field.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-                                                                            <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr_80px_auto] gap-2 items-start">
-                                                                                <select
-                                                                                    value={item?.productId || ""}
-                                                                                    onChange={(event) => handleBundleProductChange(index, event.target.value)}
-                                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                                                                >
-                                                                                    <option value="">เลือกสินค้า</option>
-                                                                                    {bundleCandidateProducts.map((product) => (
-                                                                                        <option key={product.id} value={product.id}>
-                                                                                            {product.name}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                                <select
-                                                                                    value={item?.variantId || ""}
-                                                                                    onChange={(event) => handleBundleVariantChange(index, event.target.value)}
-                                                                                    disabled={!selectedProduct?.hasVariants}
-                                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10 disabled:bg-gray-100 disabled:text-gray-400"
-                                                                                >
-                                                                                    <option value="">{selectedProduct?.hasVariants ? "ให้ลูกค้าเลือก" : "ไม่มีตัวเลือก"}</option>
-                                                                                    {(selectedProduct?.variants || []).map((variant) => (
-                                                                                        <option key={variant.id} value={variant.id}>
-                                                                                            {variant.name}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                                <input
-                                                                                    type="number"
-                                                                                    min={1}
-                                                                                    {...register(`bundleItems.${index}.quantity`)}
-                                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                                                                />
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => removeBundleItem(index)}
-                                                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                                                                                >
-                                                                                    <Trash2 size={14} />
-                                                                                </button>
-                                                                            </div>
-                                                                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
-                                                                                <span>ราคา/ชิ้น ฿{Number(item?.unitPrice || 0).toLocaleString()}</span>
-                                                                                <span>มีสินค้า {selectedStock.toLocaleString()} ชิ้น</span>
-                                                                                <span>ทำได้ {Math.floor(selectedStock / Math.max(1, Number(item?.quantity) || 1)).toLocaleString()} เซต</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : !hasVariants ? (
+                                            {/* Guide */}
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-slate-600 mb-1">คำแนะนำสินค้า</label>
+                                                <select
+                                                    {...register("guideId")}
+                                                    className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                >
+                                                    <option value="">ไม่ใช้คำแนะนำ</option>
+                                                    {productGuides
+                                                        .filter((guide) => guide.isActive !== false || guide.id === editingProduct?.guideId)
+                                                        .map((guide) => (
+                                                            <option key={guide.id} value={guide.id}>
+                                                                {guide.title}
+                                                            </option>
+                                                        ))}
+                                                </select>
+                                                <p className="mt-1 text-[10px] text-slate-400">สร้างและจัดการคำแนะนำได้ที่หน้าหมวดหมู่</p>
+                                            </div>
+
+                                            {/* Active Status Toggle */}
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                                <div>
+                                                    <span className="text-xs font-medium text-slate-800">เปิดขายสินค้า</span>
+                                                    <p className="text-[10px] text-slate-400">แสดงสินค้านี้ในหน้าร้านค้าออนไลน์</p>
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    {...register("isActive")}
+                                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                                                />
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+
+                                {/* Right Column: Stock, Variants & Bundles */}
+                                <div className="space-y-4">
+                                    <section className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
+                                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/70 border-b border-slate-200/70">
+                                            <div className="flex items-center gap-2">
+                                                <Layers size={14} className="text-slate-500" />
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">ราคาและสต็อก</span>
+                                            </div>
+                                            {!isBundle && (
+                                                <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        {...register("hasVariants")}
+                                                        className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                                                    />
+                                                    <span className="text-xs font-medium text-slate-600">มีหลายแบบ / ตัวเลือก</span>
+                                                </label>
+                                            )}
+                                        </div>
+                                        <div className="p-3.5">
+                                            {isBundle ? (
+                                                /* Bundle Mode */
+                                                <div className="space-y-3">
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div>
-                                                            <label className="block text-xs font-semibold text-gray-500 mb-1">ราคา (บาท)</label>
+                                                            <label className="block text-[11px] font-medium text-slate-600 mb-1">ราคาขายเซต (บาท)</label>
                                                             <input
                                                                 type="number"
                                                                 {...register("price")}
-                                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
+                                                                className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
                                                             />
                                                         </div>
                                                         <div>
-                                                            <label className="block text-xs font-semibold text-gray-500 mb-1">สต็อก</label>
-                                                            <input
-                                                                type="number"
-                                                                {...register("stock")}
-                                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900"
-                                                            />
+                                                            <label className="block text-[11px] font-medium text-slate-600 mb-1">สต็อกเซตคำนวณได้</label>
+                                                            <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 font-mono text-xs font-bold text-slate-900">
+                                                                {bundleAvailableStock.toLocaleString()} เซต
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        {/* Options Header */}
-                                                        <div className="flex items-center justify-between">
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-gray-900">ตัวเลือกสินค้า</p>
-                                                                <p className="text-xs text-gray-400">เพิ่มตัวเลือก เช่น สี, ไซส์ แล้วกำหนดค่าแต่ละตัวเลือก</p>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={applySizeOptionPreset}
-                                                                    className="px-3 py-1.5 bg-white text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center gap-1"
-                                                                >
-                                                                    <Layers size={12} />
-                                                                    ไซต์ S-3XL
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => appendOption({ id: generateId(), name: "", values: [], allowCustom: false })}
-                                                                    className="px-3 py-1.5 bg-gray-900 text-white text-xs font-semibold rounded-lg hover:bg-gray-800 flex items-center gap-1"
-                                                                >
-                                                                    <Plus size={12} />
-                                                                    เพิ่มตัวเลือก
-                                                                </button>
-                                                            </div>
-                                                        </div>
 
-                                                        {/* Options List */}
-                                                        <div className="space-y-3">
-                                                            {optionFields.length === 0 ? (
-                                                                <div className="p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-center">
-                                                                    <p className="text-sm text-gray-400">ยังไม่มีตัวเลือก กดปุ่มเพิ่มตัวเลือกด้านบน</p>
-                                                                </div>
-                                                            ) : (
-                                                                optionFields.map((field, index) => {
-                                                                    const currentValues = watchedOptions?.[index]?.values || [];
-                                                                    return (
-                                                                        <div key={field.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                                                            <div className="flex items-start justify-between mb-3">
-                                                                                <div className="flex-1 mr-3">
-                                                                                    <label className="block text-xs font-semibold text-gray-500 mb-1">ชื่อตัวเลือก {index + 1}</label>
-                                                                                    <input
-                                                                                        {...register(`options.${index}.name`)}
-                                                                                        placeholder="เช่น สี, ไซส์, รุ่น"
-                                                                                        onChange={(e) => {
-                                                                                            register(`options.${index}.name`).onChange(e);
-                                                                                            setTimeout(() => generateVariants(), 100);
-                                                                                        }}
-                                                                                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                                                                    />
-                                                                                </div>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => { removeOption(index); setTimeout(() => generateVariants(), 50); }}
-                                                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                                                                                >
-                                                                                    <Trash2 size={14} />
-                                                                                </button>
-                                                                            </div>
-                                                                            <div>
-                                                                                <label className="block text-xs font-semibold text-gray-500 mb-1">
-                                                                                    ค่าของตัวเลือก <span className="text-gray-400 font-normal">(พิมพ์แล้วกด Enter)</span>
-                                                                                </label>
-                                                                                <div className="flex flex-wrap gap-2 p-3 bg-white border border-gray-200 rounded-lg min-h-[48px]">
-                                                                                    {currentValues.map((val: string, vIndex: number) => (
-                                                                                        <span key={vIndex} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 text-sm font-medium rounded-full">
-                                                                                            {val}
-                                                                                            <button type="button" onClick={() => removeValue(index, val)} className="hover:text-red-500 p-0.5"><X size={12} /></button>
-                                                                                        </span>
-                                                                                    ))}
-                                                                                    <input
-                                                                                        onKeyDown={(e) => handleKeyDown(e, index)}
-                                                                                        placeholder={currentValues.length ? "เพิ่มอีก..." : "เช่น แดง, น้ำเงิน, ดำ"}
-                                                                                        className="flex-1 min-w-[100px] text-sm outline-none bg-transparent py-1"
-                                                                                    />
-                                                                                </div>
-                                                                            </div>
-                                                                            <label className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600">
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    {...register(`options.${index}.allowCustom`)}
-                                                                                    className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900/20"
-                                                                                />
-                                                                                เปิดตัวเลือกกำหนดเอง
-                                                                            </label>
+                                                    <div className="rounded-lg border border-sky-200/70 bg-sky-50/60 px-3 py-2 text-xs text-sky-800">
+                                                        ราคาสินค้าแยกรวม ฿{bundleRegularPrice.toLocaleString()}
+                                                        {bundleRegularPrice > Number(watchedPrice || 0) && (
+                                                            <span className="ml-2 font-bold text-emerald-700">
+                                                                (ประหยัด ฿{(bundleRegularPrice - Number(watchedPrice || 0)).toLocaleString()})
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between pt-1">
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-slate-800">สินค้าในเซต</p>
+                                                            <p className="text-[10px] text-slate-400">เลือกสินค้าและตัวเลือกที่รวมในเซตนี้</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => appendBundleItem({ id: generateId(), productId: "", productName: "", variantId: "", variantName: "", quantity: 1, unitPrice: 0 })}
+                                                            className="inline-flex h-7 items-center gap-1 px-2.5 rounded-lg bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition"
+                                                        >
+                                                            <Plus size={11} />
+                                                            เพิ่มสินค้า
+                                                        </button>
+                                                    </div>
+
+                                                    {bundleItemFields.length === 0 ? (
+                                                        <div className="p-5 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center">
+                                                            <Package size={24} className="mx-auto mb-1 text-slate-300" />
+                                                            <p className="text-xs text-slate-400">ยังไม่มีสินค้าในเซต</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {bundleItemFields.map((field, index) => {
+                                                                const item = watchedBundleItems?.[index];
+                                                                const selectedProduct = getBundleProduct(item?.productId);
+                                                                const selectedStock = item ? getBundleItemStock(item) : 0;
+                                                                return (
+                                                                    <div key={field.id} className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-2.5 space-y-1.5">
+                                                                        <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr_70px_auto] gap-1.5 items-center">
+                                                                            <select
+                                                                                value={item?.productId || ""}
+                                                                                onChange={(event) => handleBundleProductChange(index, event.target.value)}
+                                                                                className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                                                                            >
+                                                                                <option value="">เลือกสินค้า</option>
+                                                                                {bundleCandidateProducts.map((product) => (
+                                                                                    <option key={product.id} value={product.id}>
+                                                                                        {product.name}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </select>
+                                                                            <select
+                                                                                value={item?.variantId || ""}
+                                                                                onChange={(event) => handleBundleVariantChange(index, event.target.value)}
+                                                                                disabled={!selectedProduct?.hasVariants}
+                                                                                className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:bg-slate-100 disabled:text-slate-400"
+                                                                            >
+                                                                                <option value="">{selectedProduct?.hasVariants ? "ให้ลูกค้าเลือก" : "ไม่มีตัวเลือก"}</option>
+                                                                                {(selectedProduct?.variants || []).map((variant) => (
+                                                                                    <option key={variant.id} value={variant.id}>
+                                                                                        {variant.name}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </select>
+                                                                            <input
+                                                                                type="number"
+                                                                                min={1}
+                                                                                {...register(`bundleItems.${index}.quantity`)}
+                                                                                className="w-full h-7.5 px-1 bg-white border border-slate-200 rounded-lg text-xs text-center font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => removeBundleItem(index)}
+                                                                                className="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                                            >
+                                                                                <Trash2 size={13} />
+                                                                            </button>
                                                                         </div>
-                                                                    );
-                                                                })
-                                                            )}
+                                                                        <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 font-mono">
+                                                                            <span>ราคา/ชิ้น ฿{Number(item?.unitPrice || 0).toLocaleString()}</span>
+                                                                            <span>คงเหลือ {selectedStock.toLocaleString()} ชิ้น</span>
+                                                                            <span>จัดได้ {Math.floor(selectedStock / Math.max(1, Number(item?.quantity) || 1)).toLocaleString()} เซต</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
+                                                    )}
+                                                </div>
+                                            ) : !hasVariants ? (
+                                                /* Simple Product (No Variants) */
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[11px] font-medium text-slate-600 mb-1">ราคาขาย (บาท) *</label>
+                                                        <input
+                                                            type="number"
+                                                            {...register("price")}
+                                                            placeholder="0"
+                                                            className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[11px] font-medium text-slate-600 mb-1">จำนวนสต็อก *</label>
+                                                        <input
+                                                            type="number"
+                                                            {...register("stock")}
+                                                            placeholder="0"
+                                                            className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* Variants Mode */
+                                                <div className="space-y-3">
+                                                    {/* Options Header & Presets */}
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-slate-800">ตัวเลือกสินค้า</p>
+                                                            <p className="text-[10px] text-slate-400">เพิ่มตัวเลือก เช่น สี, ไซส์ แล้วกด Enter เพื่อสร้างค่า</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={applySizeOptionPreset}
+                                                                className="inline-flex h-7 items-center gap-1 px-2 rounded-lg border border-slate-200 bg-white text-[11px] font-medium text-slate-600 hover:bg-slate-50 transition"
+                                                            >
+                                                                <Layers size={11} />
+                                                                ไซส์ S-3XL
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => appendOption({ id: generateId(), name: "", values: [], allowCustom: false })}
+                                                                className="inline-flex h-7 items-center gap-1 px-2.5 rounded-lg bg-slate-900 text-[11px] font-medium text-white hover:bg-slate-800 transition"
+                                                            >
+                                                                <Plus size={11} />
+                                                                เพิ่มตัวเลือก
+                                                            </button>
+                                                        </div>
+                                                    </div>
 
-                                                        {/* Variants Table */}
-                                                        <div className="mt-4 pt-4 border-t border-gray-200">
-                                                            <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
-                                                                <div>
-                                                                    <p className="text-sm font-semibold text-gray-900">รายการสินค้าทั้งหมด</p>
-                                                                    <p className="text-xs text-gray-400">
-                                                                        {variantFields.length > 0
-                                                                            ? `${variantFields.length} แบบ (กำหนดราคาและจำนวนแต่ละแบบ)`
-                                                                            : 'กรุณาเพิ่มตัวเลือกและค่าด้านบนก่อน'
-                                                                        }
-                                                                    </p>
+                                                    {/* Options List */}
+                                                    <div className="space-y-2">
+                                                        {optionFields.length === 0 ? (
+                                                            <div className="p-4 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center">
+                                                                <p className="text-xs text-slate-400">ยังไม่มีตัวเลือก กดปุ่มเพิ่มตัวเลือกด้านบน</p>
+                                                            </div>
+                                                        ) : (
+                                                            optionFields.map((field, index) => {
+                                                                const currentValues = watchedOptions?.[index]?.values || [];
+                                                                return (
+                                                                    <div key={field.id} className="p-3 bg-slate-50/40 rounded-xl border border-slate-200/80 space-y-2">
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <input
+                                                                                {...register(`options.${index}.name`)}
+                                                                                placeholder="ชื่อตัวเลือก เช่น สี, ไซส์, ความจุ"
+                                                                                onChange={(e) => {
+                                                                                    register(`options.${index}.name`).onChange(e);
+                                                                                    setTimeout(() => generateVariants(), 100);
+                                                                                }}
+                                                                                className="flex-1 h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => { removeOption(index); setTimeout(() => generateVariants(), 50); }}
+                                                                                className="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                                            >
+                                                                                <Trash2 size={13} />
+                                                                            </button>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="flex flex-wrap gap-1 p-2 bg-white border border-slate-200 rounded-lg min-h-[38px] items-center">
+                                                                                {currentValues.map((val: string, vIndex: number) => (
+                                                                                    <span key={vIndex} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-md">
+                                                                                        {val}
+                                                                                        <button type="button" onClick={() => removeValue(index, val)} className="hover:text-rose-600 p-0.5">
+                                                                                            <X size={11} />
+                                                                                        </button>
+                                                                                    </span>
+                                                                                ))}
+                                                                                <input
+                                                                                    onKeyDown={(e) => handleKeyDown(e, index)}
+                                                                                    placeholder={currentValues.length ? "เพิ่มค่า..." : "เช่น แดง, น้ำเงิน, ดำ"}
+                                                                                    className="flex-1 min-w-[100px] text-xs outline-none bg-transparent py-0.5 px-1"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                {...register(`options.${index}.allowCustom`)}
+                                                                                className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                                                                            />
+                                                                            <span>เปิดให้ลูกค้ากรอกข้อความระบุเองได้</span>
+                                                                        </label>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+
+                                                    {/* Variants Bulk Settings & Table */}
+                                                    <div className="mt-3 pt-3 border-t border-slate-100">
+                                                        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                                                            <div>
+                                                                <p className="text-xs font-semibold text-slate-800">
+                                                                    ตารางรายการแบบสินค้า ({variantFields.length} แบบ)
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/60 px-2 h-7">
+                                                                    <span className="text-[10px] text-slate-400">฿</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        {...register("price")}
+                                                                        placeholder="ราคา"
+                                                                        className="w-16 bg-transparent text-right font-mono text-xs font-semibold text-slate-900 outline-none"
+                                                                    />
                                                                 </div>
+                                                                <input
+                                                                    type="number"
+                                                                    value={variantDefaultStock}
+                                                                    onChange={(event) => setVariantDefaultStock(Number(event.target.value) || 0)}
+                                                                    placeholder="สต็อก"
+                                                                    className="h-7 w-16 rounded-lg border border-slate-200 bg-slate-50/60 px-1 text-center font-mono text-xs font-bold text-slate-900 outline-none focus:bg-white"
+                                                                />
                                                                 <button
                                                                     type="button"
                                                                     onClick={applyVariantDefaults}
                                                                     disabled={variantFields.length === 0}
-                                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-500 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                                                    aria-label="ใช้ค่าเริ่มต้นกับทุกแบบสินค้า"
+                                                                    className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+                                                                    title="ใช้ราคานี้กับทุกแบบ"
                                                                 >
-                                                                    <CheckCircle size={18} />
+                                                                    <CheckCircle size={12} className="text-emerald-600" />
+                                                                    ปรับพร้อมกัน
                                                                 </button>
-                                                                <div>
-                                                                    <label className="mb-1 block text-[11px] font-semibold text-gray-500">ราคาเริ่มต้น</label>
-                                                                    <div className="flex w-28 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5">
-                                                                        <span className="text-xs text-gray-400">฿</span>
-                                                                        <input
-                                                                            type="number"
-                                                                            {...register("price")}
-                                                                            className="w-full bg-transparent text-right text-sm font-semibold text-gray-900 outline-none"
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="mb-1 block text-[11px] font-semibold text-gray-500">จำนวนเริ่มต้น</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={variantDefaultStock}
-                                                                        onChange={(event) => setVariantDefaultStock(Number(event.target.value) || 0)}
-                                                                        className="w-28 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-center text-sm font-bold text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
-                                                                    />
-                                                                </div>
                                                             </div>
+                                                        </div>
 
-                                                            {variantFields.length === 0 ? (
-                                                                <div className="p-6 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-center">
-                                                                    <Package size={32} className="mx-auto mb-2 text-gray-300" />
-                                                                    <p className="text-sm text-gray-400">ยังไม่มีรายการสินค้า</p>
-                                                                    <p className="text-xs text-gray-300 mt-1">เพิ่มตัวเลือกและกดพิมพ์ค่า Enter ด้านบน</p>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                                                    <table className="w-full text-sm">
-                                                                        <thead className="bg-gray-100 text-xs text-gray-600 font-semibold">
-                                                                            <tr>
-                                                                                <th className="px-4 py-3 text-left">แบบสินค้า</th>
-                                                                                <th className="px-4 py-3 text-right w-28">ราคา (บาท)</th>
-                                                                                <th className="px-4 py-3 text-center w-24">จำนวน</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody className="divide-y divide-gray-100 bg-white">
-                                                                            {variantFields.map((variant, index) => (
-                                                                                <tr key={variant.id} className="hover:bg-gray-50">
-                                                                                    <td className="px-4 py-3">
-                                                                                        <span className="font-semibold text-gray-900">{watchedVariants?.[index]?.name || variant.name}</span>
-                                                                                    </td>
-                                                                                    <td className="px-4 py-3">
-                                                                                        <div className="flex items-center gap-1">
-                                                                                            <span className="text-gray-400 text-xs">฿</span>
-                                                                                            <input
-                                                                                                type="number"
-                                                                                                {...register(`variants.${index}.price`)}
-                                                                                                className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-right text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 focus:bg-white"
-                                                                                            />
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="px-4 py-3">
+                                                        {variantFields.length === 0 ? (
+                                                            <div className="p-4 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center">
+                                                                <Package size={22} className="mx-auto mb-1 text-slate-300" />
+                                                                <p className="text-xs text-slate-400">ยังไม่มีรายการแบบสินค้า</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="rounded-xl border border-slate-200/80 overflow-hidden">
+                                                                <table className="w-full text-xs">
+                                                                    <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500">
+                                                                        <tr>
+                                                                            <th className="px-3 py-2 text-left">แบบสินค้า</th>
+                                                                            <th className="px-3 py-2 text-right w-24">ราคา (บาท)</th>
+                                                                            <th className="px-3 py-2 text-center w-20">จำนวน</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                                                        {variantFields.map((variant, index) => (
+                                                                            <tr key={variant.id} className="hover:bg-slate-50/50">
+                                                                                <td className="px-3 py-1.5 font-medium text-slate-800">
+                                                                                    {watchedVariants?.[index]?.name || variant.name}
+                                                                                </td>
+                                                                                <td className="px-3 py-1.5">
+                                                                                    <div className="flex items-center justify-end gap-1">
+                                                                                        <span className="text-[10px] text-slate-400">฿</span>
                                                                                         <input
                                                                                             type="number"
-                                                                                            {...register(`variants.${index}.stock`)}
-                                                                                            className={`w-full px-2 py-1.5 border rounded-lg text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10 ${Number(watchedVariants?.[index]?.stock) === 0
-                                                                                                ? 'bg-red-50 border-red-200 text-red-600'
-                                                                                                : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
-                                                                                                }`}
+                                                                                            {...register(`variants.${index}.price`)}
+                                                                                            className="w-20 h-6.5 px-1.5 bg-slate-50 border border-slate-200 rounded-md text-right font-mono text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900/10"
                                                                                         />
-                                                                                    </td>
-                                                                                </tr>
-                                                                            ))}
-                                                                        </tbody>
-                                                                        <tfoot className="bg-gray-50 border-t border-gray-200">
-                                                                            <tr>
-                                                                                <td className="px-4 py-2 text-xs font-semibold text-gray-500">
-                                                                                    รวม {variantFields.length} แบบ
+                                                                                    </div>
                                                                                 </td>
-                                                                                <td className="px-4 py-2 text-right text-xs text-gray-400">
-                                                                                    ราคาเริ่ม ฿{Math.min(...(watchedVariants?.map(v => Number(v?.price) || 0) || [0])).toLocaleString()}
-                                                                                </td>
-                                                                                <td className="px-4 py-2 text-center text-xs font-semibold text-gray-700">
-                                                                                    {(watchedVariants?.reduce((sum, v) => sum + (Number(v?.stock) || 0), 0) || 0).toLocaleString()} ชิ้น
+                                                                                <td className="px-3 py-1.5">
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        {...register(`variants.${index}.stock`)}
+                                                                                        className={`w-full h-6.5 px-1 rounded-md text-center font-mono text-xs font-bold focus:outline-none focus:ring-1 focus:ring-slate-900/10 ${
+                                                                                            Number(watchedVariants?.[index]?.stock) === 0
+                                                                                                ? 'bg-rose-50 border border-rose-200 text-rose-600'
+                                                                                                : 'bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white'
+                                                                                        }`}
+                                                                                    />
                                                                                 </td>
                                                                             </tr>
-                                                                        </tfoot>
-                                                                    </table>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                                        ))}
+                                                                    </tbody>
+                                                                    <tfoot className="bg-slate-50/70 border-t border-slate-200 text-[11px] text-slate-500 font-mono">
+                                                                        <tr>
+                                                                            <td className="px-3 py-1.5 font-medium">รวม {variantFields.length} แบบ</td>
+                                                                            <td className="px-3 py-1.5 text-right">
+                                                                                เริ่ม ฿{Math.min(...(watchedVariants?.map(v => Number(v?.price) || 0) || [0])).toLocaleString()}
+                                                                            </td>
+                                                                            <td className="px-3 py-1.5 text-center font-bold text-slate-800">
+                                                                                {(watchedVariants?.reduce((sum, v) => sum + (Number(v?.stock) || 0), 0) || 0).toLocaleString()} ชิ้น
+                                                                            </td>
+                                                                        </tr>
+                                                                    </tfoot>
+                                                                </table>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                            </div>
-                                        </section>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </section>
 
-                                        {!isBundle && (
-                                        <section className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                                            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                                    {/* Add-ons Section */}
+                                    {!isBundle && (
+                                        <section className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
+                                            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/70 border-b border-slate-200/70">
                                                 <div>
-                                                    <span className="font-semibold text-sm text-gray-900">บริการเสริม</span>
-                                                    <p className="text-xs text-gray-400">เช่น ปักชื่อ ติดโลโก้ หรือบริการที่คิดราคาเพิ่ม</p>
+                                                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">บริการเสริม (Add-ons)</span>
+                                                    <p className="text-[10px] text-slate-400">เช่น ปักชื่อ ติดโลโก้ บริการพิเศษ</p>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1622,67 +1761,67 @@ export default function AdminProductsPage() {
                                                         maxLength: 40,
                                                         isActive: true
                                                     })}
-                                                    className="px-3 py-1.5 bg-gray-900 text-white text-xs font-semibold rounded-lg hover:bg-gray-800 flex items-center gap-1"
+                                                    className="inline-flex h-7 items-center gap-1 px-2.5 rounded-lg bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition"
                                                 >
-                                                    <Plus size={12} />
+                                                    <Plus size={11} />
                                                     เพิ่มบริการ
                                                 </button>
                                             </div>
-                                            <div className="p-4 space-y-3">
+                                            <div className="p-3.5 space-y-2">
                                                 {addOnFields.length === 0 ? (
-                                                    <div className="p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-center">
-                                                        <p className="text-sm text-gray-400">ยังไม่มีบริการเสริม</p>
+                                                    <div className="p-4 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center">
+                                                        <p className="text-xs text-slate-400">ยังไม่มีบริการเสริม</p>
                                                     </div>
                                                 ) : (
                                                     addOnFields.map((field, index) => (
-                                                        <div key={field.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-                                                            <div className="grid grid-cols-1 md:grid-cols-[1fr_100px_auto] gap-2 items-center">
+                                                        <div key={field.id} className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-2.5 space-y-2">
+                                                            <div className="grid grid-cols-1 md:grid-cols-[1fr_90px_auto] gap-1.5 items-center">
                                                                 <input
                                                                     {...register(`addOns.${index}.name`)}
                                                                     placeholder="ชื่อบริการ เช่น ปักชื่อ"
-                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                                                                    className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                                                                 />
                                                                 <input
                                                                     type="number"
                                                                     {...register(`addOns.${index}.price`)}
                                                                     placeholder="ราคา"
-                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                                                                    className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                                                                 />
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => removeAddOn(index)}
-                                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                                                    className="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
                                                                 >
-                                                                    <Trash2 size={14} />
+                                                                    <Trash2 size={13} />
                                                                 </button>
                                                             </div>
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
                                                                 <input
                                                                     {...register(`addOns.${index}.inputLabel`)}
                                                                     placeholder="หัวข้อช่องกรอก เช่น ชื่อที่ต้องการปัก"
-                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                                                                    className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                                                                 />
                                                                 <input
                                                                     {...register(`addOns.${index}.placeholder`)}
-                                                                    placeholder="ข้อความตัวอย่างในช่องกรอก"
-                                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                                                                    placeholder="ข้อความตัวอย่าง เช่น คุณสมชาย"
+                                                                    className="w-full h-7.5 px-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                                                                 />
                                                             </div>
-                                                            <div className="flex flex-wrap items-center gap-3">
-                                                                <label className="flex items-center gap-2 text-xs text-gray-600">
-                                                                    <input type="checkbox" {...register(`addOns.${index}.required`)} className="h-4 w-4 rounded border-gray-300 text-gray-900" />
-                                                                    บังคับกรอกเมื่อเลือก
+                                                            <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                                                                <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+                                                                    <input type="checkbox" {...register(`addOns.${index}.required`)} className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900" />
+                                                                    บังคับกรอก
                                                                 </label>
-                                                                <label className="flex items-center gap-2 text-xs text-gray-600">
-                                                                    <input type="checkbox" {...register(`addOns.${index}.isActive`)} className="h-4 w-4 rounded border-gray-300 text-gray-900" />
+                                                                <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+                                                                    <input type="checkbox" {...register(`addOns.${index}.isActive`)} className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900" />
                                                                     เปิดใช้
                                                                 </label>
-                                                                <div className="flex items-center gap-2 text-xs text-gray-600">
+                                                                <div className="flex items-center gap-1 text-[11px] text-slate-600">
                                                                     จำกัด
                                                                     <input
                                                                         type="number"
                                                                         {...register(`addOns.${index}.maxLength`)}
-                                                                        className="w-20 px-2 py-1 bg-white border border-gray-200 rounded-lg text-sm"
+                                                                        className="w-14 h-6 px-1 bg-white border border-slate-200 rounded text-center text-xs font-mono"
                                                                     />
                                                                     ตัวอักษร
                                                                 </div>
@@ -1692,62 +1831,77 @@ export default function AdminProductsPage() {
                                                 )}
                                             </div>
                                         </section>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
+                            </div>
 
-                                {/* Submit */}
-                                <div className="flex gap-3 pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={closeModal}
-                                        className="flex-1 py-2 border border-gray-200 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
-                                    >
-                                        ยกเลิก
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSaving}
-                                        className="flex-1 py-2 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                                        {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                            {/* Form Action Footer */}
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200/80">
+                                <button
+                                    type="button"
+                                    onClick={closeModal}
+                                    className="h-8 px-4 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSaving}
+                                    className="h-8 px-4 rounded-xl bg-slate-900 text-xs font-semibold text-white shadow-2xs hover:bg-slate-800 disabled:opacity-50 transition flex items-center gap-1.5"
+                                >
+                                    {isSaving ? <Loader2 className="animate-spin" size={13} /> : <Save size={13} />}
+                                    {isSaving ? 'กำลังบันทึก...' : 'บันทึกสินค้า'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
+                </div>
             )}
 
+            {/* Delete Confirmation Modal */}
             {isDeleteConfirmOpen && deleteTarget && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                    <div className="bg-white w-full sm:max-w-md sm:rounded-xl rounded-t-xl overflow-hidden shadow-2xl">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                            <h3 className="font-semibold text-gray-900 text-sm">ลบสินค้า</h3>
-                            <button onClick={closeDeleteConfirm} className="p-1 hover:bg-gray-100 rounded">
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="p-5 bg-[#F8F9FA] space-y-2">
-                            <p className="text-sm text-gray-700">
-                                ต้องการลบสินค้า {deleteTarget.name} ใช่หรือไม่?
-                            </p>
-                            <p className="text-xs text-red-600">ลบแล้วไม่สามารถกู้คืนได้</p>
-                        </div>
-                        <div className="p-4 border-t border-gray-100 bg-white flex gap-3">
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50/50">
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                                    <Trash2 size={13} />
+                                </span>
+                                <h3 className="font-semibold text-slate-900 text-xs">ยืนยันการลบสินค้า</h3>
+                            </div>
                             <button
+                                type="button"
                                 onClick={closeDeleteConfirm}
-                                className="flex-1 px-4 py-2.5 bg-white text-gray-700 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-                                disabled={deletingProductId === deleteTarget.id}
+                                className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
                             >
-                                ปิด
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-1.5">
+                            <p className="text-xs text-slate-700">
+                                คุณต้องการลบสินค้า <span className="font-semibold text-slate-900">&quot;{deleteTarget.name}&quot;</span> ใช่หรือไม่?
+                            </p>
+                            <p className="text-[11px] text-rose-500">
+                                การกระทำนี้ไม่สามารถย้อนกลับได้ สินค้าและข้อมูลตัวเลือกทั้งหมดจะถูกลบถาวร
+                            </p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5">
+                            <button
+                                type="button"
+                                onClick={closeDeleteConfirm}
+                                disabled={deletingProductId === deleteTarget.id}
+                                className="h-7.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                            >
+                                ยกเลิก
                             </button>
                             <button
+                                type="button"
                                 onClick={confirmDeleteProduct}
-                                className="flex-1 px-4 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
                                 disabled={deletingProductId === deleteTarget.id}
+                                className="h-7.5 px-3 rounded-lg bg-rose-600 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 disabled:opacity-50 transition flex items-center gap-1.5"
                             >
-                                {deletingProductId === deleteTarget.id ? "กำลังลบ..." : "ยืนยันลบ"}
+                                {deletingProductId === deleteTarget.id && <Loader2 size={12} className="animate-spin" />}
+                                {deletingProductId === deleteTarget.id ? "กำลังลบ..." : "ลบสินค้า"}
                             </button>
                         </div>
                     </div>

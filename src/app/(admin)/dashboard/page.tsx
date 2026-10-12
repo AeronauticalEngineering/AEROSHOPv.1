@@ -76,7 +76,6 @@ const StatCard = ({
     prefix = "",
     suffix = "",
     changeLabel = "",
-    badgeTone = "blue"
 }: {
     title: string;
     value: string | number;
@@ -85,29 +84,25 @@ const StatCard = ({
     prefix?: string;
     suffix?: string;
     changeLabel?: string;
-    badgeTone?: "emerald" | "blue" | "indigo" | "amber";
 }) => {
-    const toneStyles = {
-        emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        blue: "bg-blue-50 text-blue-700 border-blue-200",
-        indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-        amber: "bg-amber-50 text-amber-700 border-amber-200"
-    };
-
     return (
-        <div className="bg-white p-3.5 rounded-xl border border-gray-200 transition-colors hover:border-gray-300">
-            <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-bold text-gray-600">{title}</span>
-                <div className={`p-1.5 rounded-lg border ${toneStyles[badgeTone]}`}>{icon}</div>
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{title}</span>
+                <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/60 text-slate-500">{icon}</div>
             </div>
-            <p className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+            <p className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-slate-900">
                 {prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}
             </p>
             {change !== undefined && (
-                <div className={`flex items-center gap-1 mt-1.5 text-xs font-bold ${change >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {change >= 0 ? <ArrowUpRight size={14} className="shrink-0" /> : <ArrowDownRight size={14} className="shrink-0" />}
-                    <span>{Math.abs(change).toFixed(1)}%</span>
-                    <span className="text-[11px] font-normal text-gray-500">{changeLabel || 'จากช่วงก่อน'}</span>
+                <div className="flex items-center gap-1 mt-1.5 text-[11px]">
+                    <span className={`inline-flex items-center gap-0.5 font-mono font-semibold px-1.5 py-0.2 rounded ${
+                        change >= 0 ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/60' : 'text-rose-700 bg-rose-50 border border-rose-200/60'
+                    }`}>
+                        {change >= 0 ? <ArrowUpRight size={12} className="shrink-0 stroke-[2.5]" /> : <ArrowDownRight size={12} className="shrink-0 stroke-[2.5]" />}
+                        <span>{Math.abs(change).toFixed(1)}%</span>
+                    </span>
+                    <span className="text-slate-400 text-[10px]">{changeLabel || 'จากช่วงก่อน'}</span>
                 </div>
             )}
         </div>
@@ -299,30 +294,31 @@ export default function AdminDashboard() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-gray-500" size={28} />
+            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-400 gap-3">
+                <Loader2 className="animate-spin text-slate-500" size={28} />
+                <span className="text-xs font-medium">กำลังโหลดแดชบอร์ด...</span>
             </div>
         );
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-4">
-            {/* Header & Date Range Toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 rounded-xl border border-gray-200">
+        <div className="max-w-7xl mx-auto space-y-3.5 pb-10 font-sans antialiased text-slate-800">
+            {/* Header & Date Range Toolbar: Clean, Compact & Zero-Noise */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-1 border-b border-slate-200/60">
                 <div>
-                    <h1 className="text-lg font-black text-gray-900 tracking-tight">ภาพรวมแดชบอร์ด</h1>
-                    <p className="text-xs text-gray-500">สถิติและข้อมูลการดำเนินงานร้านค้า</p>
+                    <h1 className="text-lg font-bold tracking-tight text-slate-900">ภาพรวมแดชบอร์ด</h1>
+                    <p className="text-xs text-slate-500 mt-0.5">สถิติและข้อมูลการดำเนินงานร้านค้าแบบเรียลไทม์</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Preset Range Pills */}
-                    <div className="flex gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Preset Range Segmented Control */}
+                    <div className="flex gap-0.5 bg-slate-100/90 p-1 rounded-lg border border-slate-200/60 text-xs font-medium">
                         {(['today', 'week', 'month'] as const).map(range => (
                             <button
                                 key={range}
                                 onClick={() => handlePresetRange(range)}
-                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${dateRange === range
-                                    ? 'bg-gray-900 text-white'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
+                                className={`px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer select-none ${dateRange === range
+                                    ? 'bg-white text-slate-900 font-semibold shadow-2xs ring-1 ring-slate-200/80'
+                                    : 'text-slate-600 hover:text-slate-900'
                                     }`}
                             >
                                 {range === 'today' ? 'วันนี้' : range === 'week' ? '7 วัน' : 'เดือนนี้'}
@@ -331,8 +327,8 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Custom Date Picker */}
-                    <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 ${dateRange === "custom" ? "border-gray-400 bg-white" : "border-gray-200 bg-gray-50"}`}>
-                        <span className="text-[11px] font-bold text-gray-600">ช่วงวันที่:</span>
+                    <div className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${dateRange === "custom" ? "border-slate-800 bg-white shadow-2xs" : "border-slate-200/80 bg-slate-50/70"}`}>
+                        <span className="text-[11px] text-slate-400">ช่วงวันที่:</span>
                         <input
                             type="date"
                             value={customStartDate}
@@ -341,9 +337,9 @@ export default function AdminDashboard() {
                                 setCustomStartDate(event.target.value);
                                 setDateRange("custom");
                             }}
-                            className="h-7 rounded border border-gray-200 bg-white px-1.5 text-xs font-semibold text-gray-800 outline-none focus:border-gray-400"
+                            className="bg-transparent text-xs font-medium text-slate-800 outline-none cursor-pointer"
                         />
-                        <span className="text-gray-400 text-xs">-</span>
+                        <span className="text-slate-400 text-xs">-</span>
                         <input
                             type="date"
                             value={customEndDate}
@@ -352,7 +348,7 @@ export default function AdminDashboard() {
                                 setCustomEndDate(event.target.value);
                                 setDateRange("custom");
                             }}
-                            className="h-7 rounded border border-gray-200 bg-white px-1.5 text-xs font-semibold text-gray-800 outline-none focus:border-gray-400"
+                            className="bg-transparent text-xs font-medium text-slate-800 outline-none cursor-pointer"
                         />
                     </div>
                 </div>
@@ -364,172 +360,198 @@ export default function AdminDashboard() {
                     title="ยอดขายรวม"
                     value={stats.currentRevenue}
                     change={stats.revenueChange}
-                    icon={<TrendingUp size={16} />}
+                    icon={<TrendingUp size={15} />}
                     prefix="฿"
-                    badgeTone="emerald"
                 />
                 <StatCard
                     title="จำนวนคำสั่งซื้อ"
                     value={stats.currentOrderCount}
                     change={stats.orderChange}
-                    icon={<ShoppingBag size={16} />}
+                    icon={<ShoppingBag size={15} />}
                     suffix=" รายการ"
-                    badgeTone="blue"
                 />
                 <StatCard
                     title="ยอดเฉลี่ย / ออเดอร์"
                     value={Math.round(stats.avgOrderValue)}
                     change={stats.avgChange}
-                    icon={<CreditCard size={16} />}
+                    icon={<CreditCard size={15} />}
                     prefix="฿"
-                    badgeTone="indigo"
                 />
                 <StatCard
                     title="ฐานลูกค้าทั้งหมด"
                     value={stats.totalCustomers}
-                    icon={<Users size={16} />}
+                    icon={<Users size={15} />}
                     suffix=" ราย"
-                    badgeTone="amber"
                 />
             </div>
 
-            {/* Order Status Breakdown & Performance */}
+            {/* Order Status Breakdown & Performance (Zero-Noise Neutral Cards) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 {/* Order Status Breakdown */}
-                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-3.5">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-bold text-sm text-gray-900">สถานะคำสั่งซื้อในช่วงที่เลือก</h3>
-                        <Link href="/orders" className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                            ดูคำสั่งซื้อ <ArrowRight size={13} />
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-800">สถานะคำสั่งซื้อในช่วงที่เลือก</span>
+                            <span className="text-[10px] text-slate-400 font-mono">({filteredOrders.length} ออเดอร์)</span>
+                        </div>
+                        <Link href="/orders" className="text-xs font-medium text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 transition-colors">
+                            <span>ไปหน้ารายการ</span>
+                            <ArrowRight size={12} />
                         </Link>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
-                        <Link href="/orders?status=pending" className="text-center p-2.5 bg-amber-50/80 border border-amber-200/80 rounded-xl hover:bg-amber-100/70 transition-colors block">
-                            <Clock size={18} className="mx-auto text-amber-700 mb-1" />
-                            <p className="text-lg font-black text-amber-900">{stats.statusBreakdown.pending}</p>
-                            <p className="text-xs font-bold text-amber-700">รอชำระ</p>
-                        </Link>
-                        <Link href="/orders?status=paid" className="text-center p-2.5 bg-blue-50/80 border border-blue-200/80 rounded-xl hover:bg-blue-100/70 transition-colors block">
-                            <CreditCard size={18} className="mx-auto text-blue-700 mb-1" />
-                            <p className="text-lg font-black text-blue-900">{stats.statusBreakdown.paid}</p>
-                            <p className="text-xs font-bold text-blue-700">ชำระแล้ว</p>
-                        </Link>
-                        <Link href="/orders?status=shipped" className="text-center p-2.5 bg-purple-50/80 border border-purple-200/80 rounded-xl hover:bg-purple-100/70 transition-colors block">
-                            <Truck size={18} className="mx-auto text-purple-700 mb-1" />
-                            <p className="text-lg font-black text-purple-900">{stats.statusBreakdown.shipped}</p>
-                            <p className="text-xs font-bold text-purple-700">จัดส่งแล้ว</p>
-                        </Link>
-                        <Link href="/orders?status=completed" className="text-center p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl hover:bg-emerald-100/70 transition-colors block">
-                            <CheckCircle size={18} className="mx-auto text-emerald-700 mb-1" />
-                            <p className="text-lg font-black text-emerald-900">{stats.statusBreakdown.completed}</p>
-                            <p className="text-xs font-bold text-emerald-700">สำเร็จ</p>
-                        </Link>
-                        <Link href="/orders?status=cancelled" className="text-center p-2.5 bg-rose-50/80 border border-rose-200/80 rounded-xl hover:bg-rose-100/70 transition-colors block">
-                            <XCircle size={18} className="mx-auto text-rose-700 mb-1" />
-                            <p className="text-lg font-black text-rose-900">{stats.statusBreakdown.cancelled}</p>
-                            <p className="text-xs font-bold text-rose-700">ยกเลิก</p>
-                        </Link>
-                        <Link href="/orders?status=returned" className="text-center p-2.5 bg-orange-50/80 border border-orange-200/80 rounded-xl hover:bg-orange-100/70 transition-colors block">
-                            <RotateCcw size={18} className="mx-auto text-orange-700 mb-1" />
-                            <p className="text-lg font-black text-orange-900">{stats.statusBreakdown.returned}</p>
-                            <p className="text-xs font-bold text-orange-700">คืนสินค้า</p>
-                        </Link>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+                        {[
+                            { href: "/orders?status=pending", label: "รอชำระ", count: stats.statusBreakdown.pending, icon: Clock, dot: "bg-amber-400" },
+                            { href: "/orders?status=paid", label: "ชำระแล้ว", count: stats.statusBreakdown.paid, icon: CreditCard, dot: "bg-blue-500" },
+                            { href: "/orders?status=shipped", label: "จัดส่งแล้ว", count: stats.statusBreakdown.shipped, icon: Truck, dot: "bg-indigo-500" },
+                            { href: "/orders?status=completed", label: "สำเร็จ", count: stats.statusBreakdown.completed, icon: CheckCircle, dot: "bg-emerald-500" },
+                            { href: "/orders?status=cancelled", label: "ยกเลิก", count: stats.statusBreakdown.cancelled, icon: XCircle, dot: "bg-rose-400" },
+                            { href: "/orders?status=returned", label: "คืนสินค้า", count: stats.statusBreakdown.returned, icon: RotateCcw, dot: "bg-orange-400" },
+                        ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <Link
+                                    key={item.label}
+                                    href={item.href}
+                                    className="p-2.5 bg-slate-50/70 border border-slate-200/70 rounded-lg hover:bg-white hover:border-slate-300 transition-all text-center block group shadow-2xs"
+                                >
+                                    <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${item.dot}`} />
+                                        <span>{item.label}</span>
+                                    </div>
+                                    <p className="text-base sm:text-lg font-bold font-mono text-slate-900">{item.count}</p>
+                                    <Icon size={13} className="mx-auto text-slate-400 group-hover:text-slate-600 mt-1 transition-colors" />
+                                </Link>
+                            );
+                        })}
                     </div>
                 </div>
 
                 {/* Conversion & Cancellation Performance */}
-                <div className="bg-white rounded-xl border border-gray-200 p-3.5 space-y-3.5 flex flex-col justify-between">
-                    <h3 className="font-bold text-sm text-gray-900">ประสิทธิภาพการขาย</h3>
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center text-xs">
-                            <span className="font-semibold text-gray-600">อัตราสำเร็จ (Conversion)</span>
-                            <span className="font-black text-emerald-700 text-sm">{stats.conversionRate.toFixed(1)}%</span>
+                <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col justify-between space-y-3">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-xs font-bold text-slate-800">ประสิทธิภาพการขาย</span>
+                        <span className="text-[10px] text-slate-400">อัตราเฉลี่ย</span>
+                    </div>
+
+                    <div className="space-y-3 py-1">
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-600 font-medium">อัตราสำเร็จ (Conversion)</span>
+                                <span className="font-bold font-mono text-emerald-700">{stats.conversionRate.toFixed(1)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-600 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(100, stats.conversionRate)}%` }}
+                                />
+                            </div>
                         </div>
-                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200/60">
-                            <div
-                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, stats.conversionRate)}%` }}
-                            />
+
+                        <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-600 font-medium">อัตรายกเลิก (Cancellation)</span>
+                                <span className="font-bold font-mono text-rose-600">{stats.cancellationRate.toFixed(1)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-rose-500 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(100, stats.cancellationRate)}%` }}
+                                />
+                            </div>
                         </div>
                     </div>
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center text-xs">
-                            <span className="font-semibold text-gray-600">อัตรายกเลิก (Cancellation)</span>
-                            <span className="font-black text-rose-600 text-sm">{stats.cancellationRate.toFixed(1)}%</span>
-                        </div>
-                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200/60">
-                            <div
-                                className="h-full bg-gradient-to-r from-rose-500 to-red-500 rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, stats.cancellationRate)}%` }}
-                            />
-                        </div>
-                    </div>
+
+                    <p className="text-[10px] text-slate-400 text-center pt-1 border-t border-slate-100">
+                        คำนวณจากยอดคำสั่งซื้อทั้งหมดในช่วงเวลาที่เลือก
+                    </p>
                 </div>
             </div>
 
-            {/* Inventory & Customer Highlights (4 Cards) */}
+            {/* Inventory & Customer Highlights (4 Clean Cards) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-white p-3 rounded-xl border border-gray-200">
-                    <div className="flex items-center gap-2 text-gray-700 text-xs font-bold mb-1">
-                        <Package size={14} className="text-gray-500" /> สินค้าทั้งหมด
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-slate-600 text-[11px] font-semibold mb-1">
+                        <Package size={13} className="text-slate-400" />
+                        <span>สินค้าทั้งหมด</span>
                     </div>
-                    <p className="text-xl font-black text-gray-900">{stats.totalProducts}</p>
-                    <p className="text-[11px] font-medium text-gray-500 mt-0.5">เปิดขาย {stats.activeProducts} รายการ</p>
+                    <p className="text-lg font-bold font-mono text-slate-900">{stats.totalProducts}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">เปิดขาย {stats.activeProducts} รายการ</p>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-rose-200 bg-rose-50/20">
-                    <div className="flex items-center gap-1.5 text-rose-700 text-xs font-bold mb-1">
-                        <AlertTriangle size={14} className="text-rose-500" /> หมดสต็อก
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 text-slate-600 text-[11px] font-semibold">
+                            <AlertTriangle size={13} className="text-rose-500" />
+                            <span>สินค้าหมดสต็อก</span>
+                        </div>
+                        {stats.outOfStock > 0 && (
+                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200/60 rounded">
+                                ต้องเติม
+                            </span>
+                        )}
                     </div>
-                    <p className="text-xl font-black text-rose-700">{stats.outOfStock}</p>
-                    <Link href="/products" className="text-[11px] font-bold text-rose-600 hover:underline mt-0.5 inline-block">จัดการสต็อก →</Link>
+                    <p className="text-lg font-bold font-mono text-rose-600">{stats.outOfStock}</p>
+                    <Link href="/products" className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline mt-0.5 inline-block">
+                        จัดการสต็อก →
+                    </Link>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-amber-200 bg-amber-50/20">
-                    <div className="flex items-center gap-1.5 text-amber-700 text-xs font-bold mb-1">
-                        <AlertTriangle size={14} className="text-amber-500" /> ใกล้หมด (≤ 5)
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 text-slate-600 text-[11px] font-semibold">
+                            <AlertTriangle size={13} className="text-amber-500" />
+                            <span>ใกล้หมด (≤ 5)</span>
+                        </div>
+                        {stats.lowStock > 0 && (
+                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200/60 rounded">
+                                เตือน
+                            </span>
+                        )}
                     </div>
-                    <p className="text-xl font-black text-amber-700">{stats.lowStock}</p>
-                    <Link href="/products" className="text-[11px] font-bold text-amber-600 hover:underline mt-0.5 inline-block">เติมสต็อก →</Link>
+                    <p className="text-lg font-bold font-mono text-amber-700">{stats.lowStock}</p>
+                    <Link href="/products" className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline mt-0.5 inline-block">
+                        ดูรายการ →
+                    </Link>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-blue-200 bg-blue-50/20">
-                    <div className="flex items-center gap-1.5 text-blue-700 text-xs font-bold mb-1">
-                        <Users size={14} className="text-blue-500" /> ลูกค้าใหม่
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-slate-600 text-[11px] font-semibold mb-1">
+                        <Users size={13} className="text-slate-400" />
+                        <span>ลูกค้าใหม่ช่วงนี้</span>
                     </div>
-                    <p className="text-xl font-black text-blue-700">{stats.newCustomers}</p>
-                    <Link href="/customers" className="text-[11px] font-bold text-blue-600 hover:underline mt-0.5 inline-block">ดูรายชื่อลูกค้า →</Link>
+                    <p className="text-lg font-bold font-mono text-slate-900">{stats.newCustomers}</p>
+                    <Link href="/customers" className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline mt-0.5 inline-block">
+                        ดูรายชื่อลูกค้า →
+                    </Link>
                 </div>
             </div>
 
             {/* Top Products & Top Customers */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {/* Top Products */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-gray-50/80 border-b border-gray-200 flex justify-between items-center">
-                        <span className="font-bold text-xs text-gray-800 uppercase tracking-wide">สินค้าขายดี (ยอดขายสูงสุด)</span>
-                        <Link href="/products" className="text-xs font-bold text-blue-600 hover:text-blue-700">ดูทั้งหมด →</Link>
+                <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2.5 bg-slate-50/60 border-b border-slate-100 flex justify-between items-center">
+                        <span className="font-bold text-xs text-slate-800">สินค้าขายดี (ยอดขายสูงสุด)</span>
+                        <Link href="/products" className="text-xs font-medium text-slate-500 hover:text-slate-900">ดูทั้งหมด →</Link>
                     </div>
-                    <div className="divide-y divide-gray-200">
+                    <div className="divide-y divide-slate-100">
                         {stats.topProducts.length === 0 ? (
-                            <div className="p-4 text-center text-gray-400 text-xs">ยังไม่มีข้อมูลการขายในช่วงนี้</div>
+                            <div className="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูลการขายในช่วงนี้</div>
                         ) : (
                             stats.topProducts.map((product, idx) => (
-                                <div key={idx} className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/60 transition-colors">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${idx === 0
-                                            ? 'bg-amber-400 text-amber-950'
-                                            : idx === 1
-                                                ? 'bg-slate-300 text-slate-800'
-                                                : idx === 2
-                                                    ? 'bg-orange-300 text-orange-900'
-                                                    : 'bg-gray-100 text-gray-600'
-                                            }`}>
+                                <div key={idx} className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-xs">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className="w-4 text-center font-mono font-bold text-slate-400 text-[11px] shrink-0">
                                             {idx + 1}
                                         </span>
                                         <div className="min-w-0">
-                                            <p className="font-bold text-xs text-gray-900 truncate max-w-[200px] sm:max-w-xs">{product.name}</p>
-                                            <p className="text-[11px] font-medium text-gray-500">ขายได้ {product.quantity} ชิ้น</p>
+                                            <p className="font-medium text-slate-900 truncate max-w-[200px] sm:max-w-xs">{product.name}</p>
+                                            <p className="text-[10px] text-slate-400">ขายได้ {product.quantity} ชิ้น</p>
                                         </div>
                                     </div>
-                                    <span className="font-black text-xs text-gray-900 shrink-0">฿{product.revenue.toLocaleString()}</span>
+                                    <span className="font-semibold font-mono text-slate-900 shrink-0">฿{product.revenue.toLocaleString()}</span>
                                 </div>
                             ))
                         )}
@@ -537,34 +559,27 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Top Customers */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-gray-50/80 border-b border-gray-200 flex justify-between items-center">
-                        <span className="font-bold text-xs text-gray-800 uppercase tracking-wide">ลูกค้า VIP (ยอดซื้อสะสมสูงสุด)</span>
-                        <Link href="/customers" className="text-xs font-bold text-blue-600 hover:text-blue-700">ดูทั้งหมด →</Link>
+                <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                    <div className="px-3.5 py-2.5 bg-slate-50/60 border-b border-slate-100 flex justify-between items-center">
+                        <span className="font-bold text-xs text-slate-800">ลูกค้า VIP (ยอดซื้อสะสมสูงสุด)</span>
+                        <Link href="/customers" className="text-xs font-medium text-slate-500 hover:text-slate-900">ดูทั้งหมด →</Link>
                     </div>
-                    <div className="divide-y divide-gray-200">
+                    <div className="divide-y divide-slate-100">
                         {stats.topCustomers.length === 0 ? (
-                            <div className="p-4 text-center text-gray-400 text-xs">ยังไม่มีข้อมูลลูกค้า</div>
+                            <div className="p-4 text-center text-slate-400 text-xs">ยังไม่มีข้อมูลลูกค้า</div>
                         ) : (
                             stats.topCustomers.map((customer, idx) => (
-                                <div key={idx} className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/60 transition-colors">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${idx === 0
-                                            ? 'bg-amber-400 text-amber-950'
-                                            : idx === 1
-                                                ? 'bg-slate-300 text-slate-800'
-                                                : idx === 2
-                                                    ? 'bg-orange-300 text-orange-900'
-                                                    : 'bg-gray-100 text-gray-600'
-                                            }`}>
+                                <div key={idx} className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50/50 transition-colors text-xs">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className="w-4 text-center font-mono font-bold text-slate-400 text-[11px] shrink-0">
                                             {idx + 1}
                                         </span>
                                         <div className="min-w-0">
-                                            <p className="font-bold text-xs text-gray-900 truncate max-w-[200px] sm:max-w-xs">{customer.name}</p>
-                                            <p className="text-[11px] font-medium text-gray-500">{customer.totalOrders || 0} คำสั่งซื้อ</p>
+                                            <p className="font-medium text-slate-900 truncate max-w-[200px] sm:max-w-xs">{customer.name}</p>
+                                            <p className="text-[10px] text-slate-400">{customer.totalOrders || 0} คำสั่งซื้อ</p>
                                         </div>
                                     </div>
-                                    <span className="font-black text-xs text-gray-900 shrink-0">฿{(customer.totalSpent || 0).toLocaleString()}</span>
+                                    <span className="font-semibold font-mono text-slate-900 shrink-0">฿{(customer.totalSpent || 0).toLocaleString()}</span>
                                 </div>
                             ))
                         )}
@@ -572,56 +587,56 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Recent Orders Table */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-4 py-2.5 bg-gray-50/80 border-b border-gray-200 flex justify-between items-center">
-                    <span className="font-bold text-xs text-gray-800 uppercase tracking-wide">คำสั่งซื้อล่าสุด</span>
-                    <Link href="/orders" className="text-xs font-bold text-blue-600 hover:text-blue-700">ดูคำสั่งซื้อทั้งหมด →</Link>
+            {/* Recent Orders Table (Clean & Compact) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                <div className="px-3.5 py-2.5 bg-slate-50/60 border-b border-slate-100 flex justify-between items-center">
+                    <span className="font-bold text-xs text-slate-800">คำสั่งซื้อล่าสุด</span>
+                    <Link href="/orders" className="text-xs font-medium text-slate-500 hover:text-slate-900">ดูทั้งหมด →</Link>
                 </div>
-                <div className="divide-y divide-gray-200">
+                <div className="divide-y divide-slate-100">
                     {recentOrders.length === 0 ? (
-                        <div className="p-4 text-center text-gray-400 text-xs">ยังไม่มีคำสั่งซื้อในระบบ</div>
+                        <div className="p-4 text-center text-slate-400 text-xs">ยังไม่มีคำสั่งซื้อในระบบ</div>
                     ) : (
                         recentOrders.map((order) => {
-                            const statusConfig: Record<string, { label: string; color: string }> = {
-                                pending: { label: "รอชำระ", color: "bg-amber-100 text-amber-800 border border-amber-300/50" },
-                                paid: { label: "ชำระแล้ว", color: "bg-blue-100 text-blue-800 border border-blue-300/50" },
-                                shipped: { label: "จัดส่งแล้ว", color: "bg-purple-100 text-purple-800 border border-purple-300/50" },
-                                completed: { label: "สำเร็จ", color: "bg-emerald-100 text-emerald-800 border border-emerald-300/50" },
-                                cancelled: { label: "ยกเลิก", color: "bg-rose-100 text-rose-800 border border-rose-300/50" },
-                                returned: { label: "คืนสินค้า", color: "bg-orange-100 text-orange-800 border border-orange-300/50" },
+                            const statusConfig: Record<string, { label: string; badge: string }> = {
+                                pending: { label: "รอชำระ", badge: "bg-amber-50 text-amber-700 border-amber-200/60" },
+                                paid: { label: "ชำระแล้ว", badge: "bg-blue-50 text-blue-700 border-blue-200/60" },
+                                shipped: { label: "จัดส่งแล้ว", badge: "bg-indigo-50 text-indigo-700 border-indigo-200/60" },
+                                completed: { label: "สำเร็จ", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60" },
+                                cancelled: { label: "ยกเลิก", badge: "bg-rose-50 text-rose-700 border-rose-200/60" },
+                                returned: { label: "คืนสินค้า", badge: "bg-orange-50 text-orange-700 border-orange-200/60" },
                             };
-                            const status = statusConfig[order.status] || { label: order.status, color: "bg-gray-100 text-gray-700 border border-gray-300/50" };
+                            const status = statusConfig[order.status] || { label: order.status, badge: "bg-slate-50 text-slate-700 border-slate-200" };
                             return (
                                 <Link
                                     key={order.id}
                                     href={`/orders/${order.id}`}
-                                    className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/80 transition-colors group"
+                                    className="px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50/60 transition-colors group text-xs"
                                 >
-                                    <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex items-center gap-2.5 min-w-0">
                                         <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono text-xs font-bold text-gray-500 group-hover:text-blue-600 transition-colors">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-mono font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">
                                                     {formatOrderId(order, 8)}
                                                 </span>
-                                                <span className="text-gray-300">•</span>
-                                                <span className="font-bold text-xs text-gray-900 truncate">
+                                                <span className="text-slate-300">•</span>
+                                                <span className="font-medium text-slate-900 truncate">
                                                     {order.customerName}
                                                 </span>
                                             </div>
-                                            <p className="text-[11px] font-medium text-gray-400 mt-0.5">
+                                            <p className="text-[10px] text-slate-400 mt-0.5">
                                                 {format(order.createdAt, 'd MMM yy HH:mm', { locale: th })}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 shrink-0">
-                                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${status.color}`}>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${status.badge}`}>
                                             {status.label}
                                         </span>
                                         <div className="text-right min-w-[70px]">
-                                            <p className="font-black text-xs text-gray-900">฿{order.totalAmount.toLocaleString()}</p>
+                                            <p className="font-semibold font-mono text-slate-900">฿{order.totalAmount.toLocaleString()}</p>
                                         </div>
-                                        <ArrowRight size={14} className="text-gray-400 group-hover:text-gray-700 transition-colors" />
+                                        <ArrowRight size={13} className="text-slate-400 group-hover:text-slate-700 transition-colors" />
                                     </div>
                                 </Link>
                             );

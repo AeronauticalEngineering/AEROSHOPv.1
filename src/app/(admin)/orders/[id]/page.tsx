@@ -15,25 +15,25 @@ import { PickupOption, StoreSettings } from "@/types/store";
 type OrderItemsDraft = Order["items"];
 type OrderAddOnDraft = NonNullable<OrderItemsDraft[number]["addOns"]>[number];
 
-const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    pending: { label: "รอชำระ", color: "text-amber-700", bg: "bg-amber-50", icon: <Clock size={12} /> },
-    paid: { label: "ชำระแล้ว", color: "text-blue-700", bg: "bg-blue-50", icon: <CreditCard size={12} /> },
-    shipped: { label: "จัดส่งแล้ว", color: "text-purple-700", bg: "bg-purple-50", icon: <Truck size={12} /> },
-    completed: { label: "สำเร็จ", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    cancelled: { label: "ยกเลิก", color: "text-red-700", bg: "bg-red-50", icon: <XCircle size={12} /> },
-    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", icon: <RotateCcw size={12} /> },
+const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; badge: string; icon: React.ReactNode }> = {
+    pending: { label: "รอชำระ", color: "text-amber-700", bg: "bg-amber-50", badge: "bg-amber-50 text-amber-700 border-amber-200/60", icon: <Clock size={11} className="text-amber-600" /> },
+    paid: { label: "ชำระแล้ว", color: "text-blue-700", bg: "bg-blue-50", badge: "bg-blue-50 text-blue-700 border-blue-200/60", icon: <CreditCard size={11} className="text-blue-600" /> },
+    shipped: { label: "จัดส่งแล้ว", color: "text-purple-700", bg: "bg-purple-50", badge: "bg-purple-50 text-purple-700 border-purple-200/60", icon: <Truck size={11} className="text-purple-600" /> },
+    completed: { label: "สำเร็จ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <CheckCircle size={11} className="text-emerald-600" /> },
+    cancelled: { label: "ยกเลิก", color: "text-rose-700", bg: "bg-rose-50", badge: "bg-rose-50 text-rose-700 border-rose-200/60", icon: <XCircle size={11} className="text-rose-600" /> },
+    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", badge: "bg-orange-50 text-orange-700 border-orange-200/60", icon: <RotateCcw size={11} className="text-orange-600" /> },
 };
 
 const statusOrder: OrderStatus[] = ["pending", "paid", "shipped", "completed", "cancelled", "returned"];
 
-const itemStatusConfig: Record<OrderItemStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    processing: { label: "ดำเนินการ", color: "text-blue-700", bg: "bg-blue-50", icon: <Clock size={12} /> },
-    ready: { label: "พร้อมรับ", color: "text-emerald-700", bg: "bg-emerald-50", icon: <Package size={12} /> },
-    received: { label: "รับแล้ว", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    shipped: { label: "จัดส่ง", color: "text-purple-700", bg: "bg-purple-50", icon: <Truck size={12} /> },
-    completed: { label: "สำเร็จ", color: "text-green-700", bg: "bg-green-50", icon: <CheckCircle size={12} /> },
-    cancelled: { label: "ยกเลิก", color: "text-red-700", bg: "bg-red-50", icon: <XCircle size={12} /> },
-    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", icon: <RotateCcw size={12} /> },
+const itemStatusConfig: Record<OrderItemStatus, { label: string; color: string; bg: string; badge: string; icon: React.ReactNode }> = {
+    processing: { label: "ดำเนินการ", color: "text-blue-700", bg: "bg-blue-50", badge: "bg-blue-50 text-blue-700 border-blue-200/60", icon: <Clock size={10} /> },
+    ready: { label: "พร้อมรับ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <Package size={10} /> },
+    received: { label: "รับแล้ว", color: "text-green-700", bg: "bg-green-50", badge: "bg-green-50 text-green-700 border-green-200/60", icon: <CheckCircle size={10} /> },
+    shipped: { label: "จัดส่ง", color: "text-purple-700", bg: "bg-purple-50", badge: "bg-purple-50 text-purple-700 border-purple-200/60", icon: <Truck size={10} /> },
+    completed: { label: "สำเร็จ", color: "text-emerald-700", bg: "bg-emerald-50", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60", icon: <CheckCircle size={10} /> },
+    cancelled: { label: "ยกเลิก", color: "text-rose-700", bg: "bg-rose-50", badge: "bg-rose-50 text-rose-700 border-rose-200/60", icon: <XCircle size={10} /> },
+    returned: { label: "คืนสินค้า", color: "text-orange-700", bg: "bg-orange-50", badge: "bg-orange-50 text-orange-700 border-orange-200/60", icon: <RotateCcw size={10} /> },
 };
 
 const selectableItemStatuses: OrderItemStatus[] = [
@@ -106,7 +106,7 @@ function cleanForFirestore<T>(obj: T): T {
             .map(item => cleanForFirestore(item)) as unknown as T;
     }
     if (typeof obj === "object" && !(obj instanceof Date)) {
-        const cleaned: Record<string, any> = {};
+        const cleaned: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(obj)) {
             if (value !== undefined) {
                 cleaned[key] = cleanForFirestore(value);
@@ -178,8 +178,9 @@ export default function AdminOrderDetailPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to resolve");
             alert("บันทึกดำเนินการเรียบร้อยแล้ว");
-        } catch (err: any) {
-            alert(err.message || "เกิดข้อผิดพลาด");
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            alert(msg || "เกิดข้อผิดพลาด");
         } finally {
             setProcessingOrderRequest(false);
         }
@@ -200,8 +201,9 @@ export default function AdminOrderDetailPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to reject");
             alert("ปฏิเสธคำขอเรียบร้อยแล้ว");
-        } catch (err: any) {
-            alert(err.message || "เกิดข้อผิดพลาด");
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            alert(msg || "เกิดข้อผิดพลาด");
         } finally {
             setProcessingOrderRequest(false);
         }
@@ -292,8 +294,9 @@ export default function AdminOrderDetailPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update info");
             setIsEditingCustomerInfo(false);
-        } catch (err: any) {
-            alert(err.message || "เกิดข้อผิดพลาด");
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            alert(msg || "เกิดข้อผิดพลาด");
         } finally {
             setSavingCustomerInfo(false);
         }
@@ -382,9 +385,10 @@ export default function AdminOrderDetailPage() {
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data?.error || "Update failed");
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error updating status:", error);
-            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error.message || error}`);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${msg}`);
         } finally {
             setUpdatingStatus(null);
         }
@@ -395,7 +399,7 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = {
+            const updatedItem: OrderItem = {
                 ...item,
                 status
             };
@@ -418,9 +422,10 @@ export default function AdminOrderDetailPage() {
                 items: safeItems,
                 updatedAt: serverTimestamp()
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error updating item status:", error);
-            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${msg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -431,7 +436,7 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}-${bundleItemIndex}`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = { ...item };
+            const updatedItem: OrderItem = { ...item };
             if (item.bundleItems && Array.isArray(item.bundleItems)) {
                 updatedItem.bundleItems = item.bundleItems.map((bundleItem, idx) => (
                     idx === bundleItemIndex ? applyPickupOption({ ...bundleItem, status }, status, pickupOptions) : bundleItem
@@ -450,9 +455,10 @@ export default function AdminOrderDetailPage() {
                 items: safeItems,
                 updatedAt: serverTimestamp()
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error updating bundle item status:", error);
-            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ${msg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -466,7 +472,7 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}-pickup`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = {
+            const updatedItem: OrderItem = {
                 ...item,
                 status: "ready" as OrderItemStatus,
                 pickupOptionId: pickupOption.id,
@@ -495,9 +501,10 @@ export default function AdminOrderDetailPage() {
                 items: safeItems,
                 updatedAt: serverTimestamp()
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error updating item pickup:", error);
-            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาด: ${msg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -511,7 +518,7 @@ export default function AdminOrderDetailPage() {
         const itemKey = `${order.id}-${itemIndex}-${bundleItemIndex}-pickup`;
         const nextItems = order.items.map((item, index) => {
             if (index !== itemIndex) return item;
-            const updatedItem: any = { ...item };
+            const updatedItem: OrderItem = { ...item };
             if (item.bundleItems && Array.isArray(item.bundleItems)) {
                 updatedItem.bundleItems = item.bundleItems.map((bundleItem, bIdx) => (
                     bIdx === bundleItemIndex
@@ -538,9 +545,10 @@ export default function AdminOrderDetailPage() {
                 items: safeItems,
                 updatedAt: serverTimestamp()
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error updating bundle pickup:", error);
-            alert(`เกิดข้อผิดพลาด: ${error?.message || error}`);
+            alert(`เกิดข้อผิดพลาด: ${msg}`);
         } finally {
             setUpdatingItemKey(null);
         }
@@ -688,9 +696,10 @@ export default function AdminOrderDetailPage() {
                 updatedAt: serverTimestamp()
             });
             setIsEditingItems(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Failed to save items:", error);
-            alert(`บันทึกรายการสินค้าไม่สำเร็จ: ${error?.message || error}`);
+            alert(`บันทึกรายการสินค้าไม่สำเร็จ: ${msg}`);
         } finally {
             setSavingItems(false);
         }
@@ -747,9 +756,10 @@ export default function AdminOrderDetailPage() {
                 items: safeItems,
                 updatedAt: serverTimestamp()
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             console.error("Error saving issue reply:", error);
-            alert(`บันทึกคำตอบกลับไม่สำเร็จ: ${error?.message || error}`);
+            alert(`บันทึกคำตอบกลับไม่สำเร็จ: ${msg}`);
         } finally {
             setSavingIssueReplyKey(null);
         }
@@ -757,21 +767,25 @@ export default function AdminOrderDetailPage() {
 
     if (loading) {
         return (
-            <div className="flex min-h-[50vh] items-center justify-center text-gray-500">
-                <Loader2 className="mr-2 animate-spin" size={20} />
-                กำลังโหลดคำสั่งซื้อ...
+            <div className="flex min-h-[40vh] flex-col items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="animate-spin text-slate-500" size={24} />
+                <p className="text-xs font-medium text-slate-500">กำลังโหลดคำสั่งซื้อ...</p>
             </div>
         );
     }
 
     if (!order) {
         return (
-            <div className="mx-auto max-w-3xl rounded-xl border border-gray-100 bg-white p-8 text-center">
+            <div className="mx-auto max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 text-center shadow-xs">
                 <ShoppingBagFallback />
-                <p className="mt-3 font-semibold text-gray-900">ไม่พบคำสั่งซื้อ</p>
-                <Link href="/orders" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white">
-                    <ChevronLeft size={16} />
-                    กลับหน้าคำสั่งซื้อ
+                <p className="mt-3 text-sm font-semibold text-slate-800">ไม่พบคำสั่งซื้อ</p>
+                <p className="mt-1 text-xs text-slate-400">คำสั่งซื้อนี้อาจถูกลบหรือไม่มีอยู่ในระบบ</p>
+                <Link
+                    href="/orders"
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800"
+                >
+                    <ChevronLeft size={14} />
+                    กลับหน้ารายการคำสั่งซื้อ
                 </Link>
             </div>
         );
@@ -781,33 +795,49 @@ export default function AdminOrderDetailPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                    <Link href="/orders" className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-900">
-                        <ChevronLeft size={14} />
-                        กลับหน้าคำสั่งซื้อ
-                    </Link>
+            {/* Top Bar: Navigation, Monospace Order ID & Status Transitions */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-xl font-bold text-gray-900">คำสั่งซื้อ {formatOrderId(order, 8)}</h1>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${status.bg} ${status.color}`}>
+                        <Link
+                            href="/orders"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
+                        >
+                            <ChevronLeft size={14} />
+                            คำสั่งซื้อ
+                        </Link>
+                        <span className="text-slate-300">/</span>
+                        <span className="rounded-md border border-slate-200/80 bg-slate-100/80 px-2 py-0.5 font-mono text-xs font-bold text-slate-800">
+                            #{formatOrderId(order, 8)}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.badge}`}>
                             {status.icon}
                             {status.label}
                         </span>
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">สร้างเมื่อ {format(createdAt, "d MMMM yyyy HH:mm", { locale: th })}</p>
+                    <p className="text-[11px] text-slate-400">
+                        สร้างเมื่อ {format(createdAt, "d MMMM yyyy HH:mm น.", { locale: th })}
+                    </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+
+                {/* Status Segmented Control */}
+                <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/60 bg-slate-100/70 p-1">
                     {statusOrder.map((nextStatus) => {
                         const config = statusConfig[nextStatus];
+                        const isActive = order.status === nextStatus;
                         return (
                             <button
                                 key={nextStatus}
                                 type="button"
                                 onClick={() => updateStatus(nextStatus)}
-                                disabled={order.status === nextStatus || Boolean(updatingStatus)}
-                                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${order.status === nextStatus ? `${config.bg} ${config.color} border-transparent` : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                                disabled={isActive || Boolean(updatingStatus)}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed ${
+                                    isActive
+                                        ? `border border-slate-200/80 bg-white shadow-xs font-semibold ${config.color}`
+                                        : "border border-transparent text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                                }`}
                             >
-                                {updatingStatus === nextStatus ? <Loader2 size={12} className="animate-spin" /> : config.icon}
+                                {updatingStatus === nextStatus ? <Loader2 size={11} className="animate-spin" /> : config.icon}
                                 {config.label}
                             </button>
                         );
@@ -817,32 +847,32 @@ export default function AdminOrderDetailPage() {
 
             {/* Pending Order Edit Request Banner */}
             {pendingOrderRequest && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50/95 p-4 shadow-sm">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-3">
-                            <div className="rounded-lg bg-blue-100 p-2 text-blue-700 mt-0.5">
-                                <Package size={18} />
+                <div className="rounded-xl border border-blue-200/80 bg-blue-50/50 p-3 sm:p-3.5 backdrop-blur-xs shadow-xs">
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-2.5">
+                            <div className="mt-0.5 shrink-0 rounded-lg bg-blue-100/80 p-1.5 text-blue-700">
+                                <Package size={15} />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold uppercase tracking-wider text-blue-800">มีคำขอแก้ไขออเดอร์ / บริการเสริมจากลูกค้า</span>
-                                    <span className="rounded-full bg-blue-200 px-2 py-0.5 text-[10px] font-semibold text-blue-900">รอตรวจสอบ</span>
+                                    <span className="text-[11px] font-semibold text-blue-800">คำขอแก้ไขออเดอร์ / บริการเสริมจากลูกค้า</span>
+                                    <span className="rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-medium text-blue-700">รอตรวจสอบ</span>
                                 </div>
-                                <p className="mt-1 text-sm font-semibold text-gray-900">
-                                    {pendingOrderRequest.itemName ? `สินค้า: ${pendingOrderRequest.itemName} — ` : ""}
-                                    สิ่งที่ขอแก้ไข: <span className="text-blue-900 font-bold">{pendingOrderRequest.details}</span>
+                                <p className="mt-0.5 text-xs text-slate-800">
+                                    {pendingOrderRequest.itemName && <span className="text-slate-500">สินค้า: {pendingOrderRequest.itemName} — </span>}
+                                    สิ่งที่ขอแก้ไข: <span className="font-semibold text-blue-900">{pendingOrderRequest.details}</span>
                                 </p>
                                 {pendingOrderRequest.reason && (
-                                    <p className="mt-0.5 text-xs text-gray-600">เหตุผล: {pendingOrderRequest.reason}</p>
+                                    <p className="mt-0.5 text-[11px] text-slate-500">เหตุผล: {pendingOrderRequest.reason}</p>
                                 )}
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-center">
+                        <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-center">
                             <button
                                 type="button"
                                 disabled={processingOrderRequest}
                                 onClick={() => handleRejectOrderRequest(pendingOrderRequest.id)}
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                             >
                                 ปฏิเสธ
                             </button>
@@ -850,23 +880,26 @@ export default function AdminOrderDetailPage() {
                                 type="button"
                                 disabled={processingOrderRequest}
                                 onClick={() => handleResolveOrderRequest(pendingOrderRequest.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                className="inline-flex h-7 items-center gap-1 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white shadow-xs hover:bg-blue-700 disabled:opacity-50"
                             >
-                                {processingOrderRequest ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={13} />}
-                                บันทึกดำเนินการเรียบร้อย
+                                {processingOrderRequest ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle size={12} />}
+                                บันทึกเรียบร้อย
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            {/* Main Content: 2 Columns */}
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+                {/* Left Column: Customer, Shipping & Status Info */}
                 <div className="space-y-4">
-                    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                                <User size={16} className="text-gray-500" />
-                                <span className="text-sm font-semibold text-gray-900">ข้อมูลลูกค้า</span>
+                    {/* Customer Information Card */}
+                    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
+                            <div className="flex items-center gap-2">
+                                <User size={14} className="text-slate-500" />
+                                <span className="text-xs font-semibold text-slate-700">ข้อมูลลูกค้า</span>
                             </div>
                             {!isEditingCustomerInfo ? (
                                 <button
@@ -877,18 +910,18 @@ export default function AdminOrderDetailPage() {
                                         setEditShippingAddress(order.shippingAddress || "");
                                         setIsEditingCustomerInfo(true);
                                     }}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors"
                                 >
-                                    <Pencil size={12} />
+                                    <Pencil size={11} />
                                     แก้ไขข้อมูล
                                 </button>
                             ) : (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                     <button
                                         type="button"
                                         disabled={savingCustomerInfo}
                                         onClick={() => setIsEditingCustomerInfo(false)}
-                                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                                        className="h-6.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                                     >
                                         ยกเลิก
                                     </button>
@@ -896,9 +929,9 @@ export default function AdminOrderDetailPage() {
                                         type="button"
                                         disabled={savingCustomerInfo}
                                         onClick={handleSaveCustomerInfo}
-                                        className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                        className="inline-flex h-6.5 items-center gap-1 rounded-md bg-slate-900 px-2.5 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                                     >
-                                        {savingCustomerInfo && <Loader2 size={11} className="animate-spin" />}
+                                        {savingCustomerInfo && <Loader2 size={10} className="animate-spin" />}
                                         บันทึก
                                     </button>
                                 </div>
@@ -906,68 +939,93 @@ export default function AdminOrderDetailPage() {
                         </div>
 
                         {isEditingCustomerInfo ? (
-                            <div className="space-y-3 p-4">
+                            <div className="space-y-3 p-3.5">
                                 <div>
-                                    <label className="mb-1 block text-xs font-semibold text-gray-700">ชื่อผู้รับ <span className="text-red-500">*</span></label>
+                                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                                        ชื่อผู้รับ <span className="text-rose-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         value={editCustomerName}
                                         onChange={(e) => setEditCustomerName(e.target.value)}
-                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="h-8 w-full rounded-lg border border-slate-200 px-2.5 text-xs text-slate-900 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300"
                                         placeholder="ชื่อ-นามสกุล"
                                     />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-semibold text-gray-700">เบอร์โทร</label>
+                                    <label className="mb-1 block text-[11px] font-medium text-slate-600">เบอร์โทร</label>
                                     <input
                                         type="tel"
                                         value={editCustomerPhone}
                                         onChange={(e) => setEditCustomerPhone(e.target.value)}
-                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="h-8 w-full rounded-lg border border-slate-200 px-2.5 text-xs text-slate-900 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300"
                                         placeholder="08xxxxxxxx"
                                     />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-semibold text-gray-700">ที่อยู่จัดส่ง</label>
+                                    <label className="mb-1 block text-[11px] font-medium text-slate-600">ที่อยู่จัดส่ง</label>
                                     <textarea
                                         rows={3}
                                         value={editShippingAddress}
                                         onChange={(e) => setEditShippingAddress(e.target.value)}
-                                        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-900 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300"
                                         placeholder="รายละเอียดที่อยู่จัดส่ง"
                                     />
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+                            <div className="space-y-3 p-3.5">
                                 {getLineName(order) && (
-                                    <InfoItem label="LINE Name" value={getLineName(order)} className="sm:col-span-2" />
+                                    <div>
+                                        <p className="text-[11px] font-medium text-slate-400">LINE Name</p>
+                                        <div className="mt-0.5 inline-flex items-center gap-1 rounded-md border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                            {getLineName(order)}
+                                        </div>
+                                    </div>
                                 )}
-                                <InfoItem label="ชื่อ" value={order.customerName} />
-                                <InfoItem label="เบอร์โทร" value={order.customerPhone} />
-                                {order.customerCitizenId && <InfoItem label="เลขบัตรประชาชน" value={order.customerCitizenId} />}
-                                <InfoItem label="Customer ID" value={order.customerId || order.userId || "-"} className="sm:col-span-2 break-all font-mono text-xs" />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <InfoItem label="ชื่อผู้รับ" value={order.customerName} />
+                                    <InfoItem label="เบอร์โทร" value={order.customerPhone} />
+                                </div>
+                                {order.customerCitizenId && (
+                                    <InfoItem label="เลขบัตรประชาชน" value={order.customerCitizenId} />
+                                )}
+                                <div>
+                                    <p className="text-[11px] font-medium text-slate-400">Customer ID</p>
+                                    <p className="mt-0.5 truncate rounded-md border border-slate-100 bg-slate-50/80 px-2 py-1 font-mono text-[11px] text-slate-500">
+                                        {order.customerId || order.userId || "-"}
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </section>
 
-                    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                        <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
-                            <MapPin size={16} className="text-gray-500" />
-                            <span className="text-sm font-semibold text-gray-900">ที่อยู่จัดส่ง</span>
+                    {/* Shipping Address Card */}
+                    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+                        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
+                            <MapPin size={14} className="text-slate-500" />
+                            <span className="text-xs font-semibold text-slate-700">ที่อยู่จัดส่ง</span>
                         </div>
-                        <div className="p-4">
-                            <p className="whitespace-pre-line text-sm leading-6 text-gray-700">{order.shippingAddress || "ไม่ระบุ (รับเอง)"}</p>
-                            <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                                <span className="font-semibold text-gray-900">{order.shippingOptionName || "ค่าจัดส่ง"}</span>
-                                <span className="ml-2">{order.deliveryFee ? `฿${order.deliveryFee.toLocaleString()}` : "ฟรี"}</span>
+                        <div className="p-3.5">
+                            <p className="whitespace-pre-line text-xs leading-relaxed text-slate-700">
+                                {order.shippingAddress || "ไม่ระบุ (รับเอง)"}
+                            </p>
+                            <div className="mt-2.5 flex items-center justify-between rounded-lg border border-slate-200/60 bg-slate-50/70 p-2.5 text-xs">
+                                <span className="font-medium text-slate-600">{order.shippingOptionName || "ค่าจัดส่ง"}</span>
+                                <span className="font-mono font-semibold text-slate-900">
+                                    {order.deliveryFee ? `฿${order.deliveryFee.toLocaleString()}` : "ฟรี"}
+                                </span>
                             </div>
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-gray-100 bg-white p-4">
-                        <p className="mb-3 text-sm font-semibold text-gray-900">รายละเอียดสถานะ</p>
-                        <div className="space-y-3 text-sm">
+                    {/* Status Details Card */}
+                    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+                        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
+                            <Clock size={14} className="text-slate-500" />
+                            <span className="text-xs font-semibold text-slate-700">รายละเอียดสถานะ</span>
+                        </div>
+                        <div className="divide-y divide-slate-100/80">
                             <DetailRow label="ชำระเงิน" value={order.paymentDetail || "-"} />
                             <DetailRow label="จัดส่ง" value={order.shippingDetail || "-"} />
                             <DetailRow label="เลขพัสดุ" value={order.trackingNumber || "-"} />
@@ -979,21 +1037,25 @@ export default function AdminOrderDetailPage() {
                     </section>
                 </div>
 
+                {/* Right Column: Order Items, Draft Editor & Totals */}
                 <div className="space-y-4">
-                    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                        <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-center gap-3">
-                                <Package size={16} className="text-gray-500" />
-                                <span className="text-sm font-semibold text-gray-900">รายการสินค้า</span>
+                    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-xs">
+                        <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/60 px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-2">
+                                <Package size={15} className="text-slate-500" />
+                                <span className="text-xs font-semibold text-slate-800">รายการสินค้า</span>
+                                <span className="rounded-full border border-slate-200/70 bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] font-semibold text-slate-600">
+                                    {itemDrafts.length} รายการ
+                                </span>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1.5">
                                 {isEditingItems ? (
                                     <>
                                         <button
                                             type="button"
                                             onClick={cancelItemEditing}
                                             disabled={savingItems}
-                                            className="inline-flex h-8 items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
                                         >
                                             ยกเลิก
                                         </button>
@@ -1001,9 +1063,9 @@ export default function AdminOrderDetailPage() {
                                             type="button"
                                             onClick={saveItemDrafts}
                                             disabled={savingItems}
-                                            className="inline-flex h-8 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
                                         >
-                                            {savingItems && <Loader2 size={12} className="animate-spin" />}
+                                            {savingItems && <Loader2 size={11} className="animate-spin" />}
                                             บันทึกรายการสินค้า
                                         </button>
                                     </>
@@ -1011,28 +1073,29 @@ export default function AdminOrderDetailPage() {
                                     <button
                                         type="button"
                                         onClick={() => setIsEditingItems(true)}
-                                        className="inline-flex h-8 items-center justify-center rounded-md bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-gray-800"
+                                        className="h-7 rounded-lg bg-slate-900 px-2.5 text-xs font-medium text-white transition hover:bg-slate-800"
                                     >
                                         แก้ไขรายการ
                                     </button>
                                 )}
                             </div>
                         </div>
-                        <div className="space-y-2 bg-gray-50/40 p-3">
+
+                        <div className="space-y-2.5 bg-slate-50/40 p-3">
                             {itemDrafts.map((item, index) => (
-                                <div key={`${item.productId}-${index}`} className="rounded-lg border border-gray-200 bg-white p-3">
-                                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_112px_84px_88px] xl:items-end">
+                                <div key={`${item.productId}-${index}`} className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs transition hover:border-slate-300/70">
+                                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_112px_84px_96px] xl:items-end">
                                         <div className="min-w-0 space-y-1.5">
-                                            <div className="flex flex-wrap items-center gap-2">
+                                            <div className="flex flex-wrap items-center gap-1.5">
                                                 <input
                                                     value={item.productName}
                                                     onChange={(event) => updateItemDraft(index, { productName: event.target.value })}
                                                     disabled={!isEditingItems}
-                                                    className="h-8 min-w-[150px] max-w-[240px] flex-1 rounded-md border border-gray-200 bg-white px-2.5 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
+                                                    className="h-7.5 min-w-[150px] max-w-[260px] flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-slate-50/60 disabled:text-slate-900"
                                                     aria-label="ชื่อสินค้า"
                                                 />
                                                 {item.status && (
-                                                    <span className={`inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold ${itemStatusConfig[item.status].bg} ${itemStatusConfig[item.status].color}`}>
+                                                    <span className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-medium ${itemStatusConfig[item.status].badge}`}>
                                                         {itemStatusConfig[item.status].icon}
                                                         {itemStatusConfig[item.status].label}
                                                     </span>
@@ -1041,13 +1104,13 @@ export default function AdminOrderDetailPage() {
                                                     value={isSelectableItemStatus(item.status) ? item.status : ""}
                                                     onChange={(event) => updateItemStatus(index, event.target.value as OrderItemStatus)}
                                                     disabled={updatingItemKey === `${order.id}-${index}`}
-                                                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                                                     aria-label={`สถานะสินค้า ${item.productName}`}
                                                 >
                                                     <option value="" disabled>เลือกสถานะ</option>
-                                                    {selectableItemStatuses.map((status) => (
-                                                        <option key={status} value={status}>
-                                                            {itemStatusConfig[status].label}
+                                                    {selectableItemStatuses.map((st) => (
+                                                        <option key={st} value={st}>
+                                                            {itemStatusConfig[st].label}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -1056,7 +1119,7 @@ export default function AdminOrderDetailPage() {
                                                         value={item.pickupOptionId || pickupOptions[0]?.id || ""}
                                                         onChange={(event) => updateItemPickup(index, event.target.value)}
                                                         disabled={updatingItemKey === `${order.id}-${index}-pickup`}
-                                                        className="h-8 min-w-[190px] rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        className="h-7 min-w-[180px] rounded-md border border-emerald-200 bg-emerald-50/70 px-2 text-[11px] font-semibold text-emerald-800 outline-none transition focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
                                                         aria-label={`สถานที่รับ ${item.productName}`}
                                                     >
                                                         {pickupOptions.map((option) => (
@@ -1070,9 +1133,9 @@ export default function AdminOrderDetailPage() {
                                             <input
                                                 value={item.variantInfo || ""}
                                                 onChange={(event) => updateItemDraft(index, { variantInfo: event.target.value })}
-                                                placeholder="ตัวเลือกสินค้า"
+                                                placeholder="ตัวเลือกสินค้า (ถ้ามี)"
                                                 disabled={!isEditingItems}
-                                                className="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-700 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-700"
+                                                className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-slate-50/60 disabled:text-slate-500"
                                                 aria-label="ตัวเลือกสินค้า"
                                             />
                                         </div>
@@ -1088,12 +1151,14 @@ export default function AdminOrderDetailPage() {
                                             onChange={(value) => updateItemDraft(index, { quantity: Math.max(1, value) })}
                                             disabled={!isEditingItems}
                                         />
-                                        <div className="rounded-md bg-gray-50 px-2 py-1.5 text-right">
-                                            <p className="text-[10px] font-semibold text-gray-400">รวม</p>
-                                            <p className="text-right text-sm font-bold text-gray-900">
+                                        <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-1.5 text-right">
+                                            <p className="text-[10px] font-medium text-slate-400">รวม</p>
+                                            <p className="font-mono text-xs font-bold text-slate-900">
                                                 ฿{(toNumber(item.finalPrice ?? item.price) * toNumber(item.quantity)).toLocaleString()}
                                             </p>
                                         </div>
+
+                                        {/* Add-ons List */}
                                         <div className="space-y-1.5 xl:col-span-4">
                                             {item.addOns && item.addOns.length > 0 ? (
                                                 <div className="space-y-1.5">
@@ -1112,31 +1177,35 @@ export default function AdminOrderDetailPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => addItemAddOn(index)}
-                                                    className="inline-flex items-center gap-1 rounded border border-dashed border-gray-300 bg-gray-50/60 px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-100 transition-colors"
+                                                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
                                                 >
-                                                    <Plus size={12} />
+                                                    <Plus size={11} />
                                                     เพิ่มบริการเสริม
                                                 </button>
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Bundle Items Sub-section */}
                                     {item.bundleItems?.length ? (
-                                        <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                                            <div className="border-b border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700">รายการในเซต</div>
+                                        <div className="mt-2.5 overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/60">
+                                            <div className="border-b border-slate-200/70 px-3 py-1.5 text-[11px] font-semibold text-slate-700">
+                                                รายการในเซต
+                                            </div>
                                             <div className="space-y-1.5 p-2">
                                                 {item.bundleItems.map((bundleItem, bundleIndex) => (
-                                                    <div key={`${bundleItem.id}-${bundleIndex}`} className="grid grid-cols-1 gap-1.5 rounded-md border border-gray-200 bg-white p-2 text-xs xl:grid-cols-[minmax(0,1fr)_92px_74px_82px] xl:items-end">
-                                                        <div className="space-y-1.5">
-                                                            <div className="flex flex-wrap items-center gap-2">
+                                                    <div key={`${bundleItem.id}-${bundleIndex}`} className="grid grid-cols-1 gap-1.5 rounded-lg border border-slate-200/70 bg-white p-2 text-xs xl:grid-cols-[minmax(0,1fr)_92px_74px_88px] xl:items-end">
+                                                        <div className="space-y-1">
+                                                            <div className="flex flex-wrap items-center gap-1.5">
                                                                 <input
                                                                     value={bundleItem.productName}
                                                                     onChange={(event) => updateBundleItemDraft(index, bundleIndex, { productName: event.target.value })}
                                                                     disabled={!isEditingItems}
-                                                                    className="h-7 min-w-[110px] max-w-[160px] flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900"
+                                                                    className="h-6.5 min-w-[110px] max-w-[170px] flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-slate-50/60 disabled:text-slate-900"
                                                                     aria-label="ชื่อสินค้าในเซต"
                                                                 />
                                                                 {bundleItem.status && (
-                                                                    <span className={`inline-flex h-5 items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold ${itemStatusConfig[bundleItem.status].bg} ${itemStatusConfig[bundleItem.status].color}`}>
+                                                                    <span className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[10px] font-medium ${itemStatusConfig[bundleItem.status].badge}`}>
                                                                         {itemStatusConfig[bundleItem.status].icon}
                                                                         {itemStatusConfig[bundleItem.status].label}
                                                                     </span>
@@ -1145,13 +1214,13 @@ export default function AdminOrderDetailPage() {
                                                                     value={isSelectableItemStatus(bundleItem.status) ? bundleItem.status : ""}
                                                                     onChange={(event) => updateBundleItemStatus(index, bundleIndex, event.target.value as OrderItemStatus)}
                                                                     disabled={updatingItemKey === `${order.id}-${index}-${bundleIndex}`}
-                                                                    className="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    className="h-6.5 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-medium text-slate-700 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                                                                     aria-label={`สถานะสินค้าในเซต ${bundleItem.productName}`}
                                                                 >
                                                                     <option value="" disabled>รายชิ้น</option>
-                                                                    {selectableItemStatuses.map((status) => (
-                                                                        <option key={status} value={status}>
-                                                                            {itemStatusConfig[status].label}
+                                                                    {selectableItemStatuses.map((st) => (
+                                                                        <option key={st} value={st}>
+                                                                            {itemStatusConfig[st].label}
                                                                         </option>
                                                                     ))}
                                                                 </select>
@@ -1160,7 +1229,7 @@ export default function AdminOrderDetailPage() {
                                                                         value={bundleItem.pickupOptionId || pickupOptions[0]?.id || ""}
                                                                         onChange={(event) => updateBundleItemPickup(index, bundleIndex, event.target.value)}
                                                                         disabled={updatingItemKey === `${order.id}-${index}-${bundleIndex}-pickup`}
-                                                                        className="h-7 min-w-[170px] rounded-md border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        className="h-6.5 min-w-[160px] rounded-md border border-emerald-200 bg-emerald-50/70 px-2 text-[10px] font-semibold text-emerald-800 outline-none transition focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
                                                                         aria-label={`สถานที่รับสินค้าในเซต ${bundleItem.productName}`}
                                                                     >
                                                                         {pickupOptions.map((option) => (
@@ -1176,10 +1245,10 @@ export default function AdminOrderDetailPage() {
                                                                 onChange={(event) => updateBundleItemDraft(index, bundleIndex, { variantName: event.target.value })}
                                                                 placeholder="ตัวเลือก"
                                                                 disabled={!isEditingItems}
-                                                                className="h-7 w-full rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-700 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-700"
+                                                                className="h-6.5 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-slate-50/60 disabled:text-slate-500"
                                                                 aria-label="ตัวเลือกสินค้าในเซต"
                                                             />
-                                                            <div className="space-y-1 mt-1">
+                                                            <div className="mt-1 space-y-1">
                                                                 {bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0 ? (
                                                                     <div className="space-y-1">
                                                                         {bundleItem.selectedAddOns.map((addOn, addOnIndex) => (
@@ -1198,7 +1267,7 @@ export default function AdminOrderDetailPage() {
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => addBundleAddOn(index, bundleIndex)}
-                                                                        className="inline-flex items-center gap-1 rounded border border-dashed border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                                                                        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
                                                                     >
                                                                         <Plus size={10} />
                                                                         เพิ่มบริการเสริมในเซต
@@ -1220,9 +1289,9 @@ export default function AdminOrderDetailPage() {
                                                             compact
                                                             disabled={!isEditingItems}
                                                         />
-                                                        <div className="rounded-md bg-gray-50 px-2 py-1 text-right">
-                                                            <p className="text-[10px] font-semibold text-gray-400">รวม</p>
-                                                            <p className="text-right font-semibold text-gray-700">
+                                                        <div className="rounded-md border border-slate-100 bg-slate-50/80 px-2 py-1 text-right">
+                                                            <p className="text-[10px] font-medium text-slate-400">รวม</p>
+                                                            <p className="font-mono text-xs font-semibold text-slate-700">
                                                                 ฿{(toNumber(bundleItem.unitPrice) * toNumber(bundleItem.quantity) * toNumber(item.quantity)).toLocaleString()}
                                                             </p>
                                                         </div>
@@ -1246,6 +1315,8 @@ export default function AdminOrderDetailPage() {
                                             </div>
                                         </div>
                                     ) : null}
+
+                                    {/* Parent Item Issue Reply */}
                                     {(item.issueReason || item.issueAdminReply || item.status === "cancelled" || item.status === "returned") && (
                                         <IssueReplyBox
                                             reason={item.issueReason}
@@ -1261,9 +1332,16 @@ export default function AdminOrderDetailPage() {
                                 </div>
                             ))}
                         </div>
-                        <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2.5">
-                            <span className="text-sm font-semibold text-gray-700">รวมทั้งหมด</span>
-                            <span className="text-xl font-bold text-gray-900">
+
+                        {/* Grand Total Footer */}
+                        <div className="flex items-center justify-between border-t border-slate-200/80 bg-slate-50/70 px-4 py-3">
+                            <div>
+                                <span className="text-xs font-semibold text-slate-700">ยอดรวมทั้งสิ้น</span>
+                                <span className="ml-2 text-[11px] text-slate-400">
+                                    (สินค้า ฿{calculateItemsTotal(itemDrafts).toLocaleString()} + จัดส่ง {order.deliveryFee ? `฿${toNumber(order.deliveryFee).toLocaleString()}` : "฿0"})
+                                </span>
+                            </div>
+                            <span className="font-mono text-lg font-bold text-slate-900">
                                 ฿{(calculateItemsTotal(itemDrafts) + toNumber(order.deliveryFee)).toLocaleString()}
                             </span>
                         </div>
@@ -1274,20 +1352,20 @@ export default function AdminOrderDetailPage() {
     );
 }
 
-function InfoItem({ label, value, className = "" }: { label: string; value: string; className?: string }) {
+function InfoItem({ label, value, className = "" }: { label: string; value?: string | null; className?: string }) {
     return (
         <div className={className}>
-            <p className="mb-1 text-xs text-gray-400">{label}</p>
-            <p className="text-sm font-semibold text-gray-900">{value}</p>
+            <p className="text-[11px] font-medium text-slate-400">{label}</p>
+            <p className="mt-0.5 text-xs font-semibold text-slate-800">{value || "-"}</p>
         </div>
     );
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex justify-between gap-3">
-            <span className="text-gray-400">{label}</span>
-            <span className="whitespace-pre-line text-right text-gray-700">{value}</span>
+        <div className="flex items-start justify-between gap-3 px-3.5 py-2">
+            <span className="shrink-0 text-[11px] font-medium text-slate-400">{label}</span>
+            <span className="whitespace-pre-line text-right font-mono text-xs font-medium text-slate-700">{value}</span>
         </div>
     );
 }
@@ -1307,14 +1385,14 @@ function NumberField({
 }) {
     return (
         <label className="block">
-            <span className="mb-0.5 block text-[10px] font-semibold text-gray-400">{label}</span>
+            <span className="mb-0.5 block text-[10px] font-medium text-slate-400">{label}</span>
             <input
                 type="number"
                 min={0}
                 value={value}
                 onChange={(event) => onChange(toNumber(event.target.value))}
                 disabled={disabled}
-                className={`${compact ? "h-7 text-xs" : "h-8 text-sm"} w-full rounded-md border border-gray-200 bg-white px-2 text-right font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-900`}
+                className={`${compact ? "h-6.5 text-[11px]" : "h-7.5 text-xs"} w-full rounded-lg border border-slate-200 bg-white px-2 text-right font-mono font-semibold text-slate-800 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-slate-50/70 disabled:text-slate-800`}
             />
         </label>
     );
@@ -1334,9 +1412,9 @@ function AddOnEditor({
     compact?: boolean;
 }) {
     return (
-        <div className={`grid grid-cols-1 items-center gap-1.5 rounded-md border border-gray-100 bg-gray-50 p-1.5 ${
+        <div className={`grid grid-cols-1 items-center gap-1.5 rounded-lg border border-slate-200/70 bg-slate-50/60 p-1.5 ${
             !disabled && onDelete
-                ? (compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_65px_28px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_75px_28px]")
+                ? (compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_65px_26px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_75px_28px]")
                 : (compact ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_70px]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_84px]")
         }`}>
             <input
@@ -1344,7 +1422,7 @@ function AddOnEditor({
                 onChange={(event) => onChange({ name: event.target.value })}
                 disabled={disabled}
                 placeholder="ชื่อบริการเสริม"
-                className="h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-700"
+                className="h-6.5 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-white disabled:text-slate-700"
                 aria-label="ชื่อบริการเสริม"
             />
             <input
@@ -1352,7 +1430,7 @@ function AddOnEditor({
                 onChange={(event) => onChange({ value: event.target.value })}
                 disabled={disabled}
                 placeholder="รายละเอียด/ค่า"
-                className="h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-700 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-600"
+                className="h-6.5 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-white disabled:text-slate-600"
                 aria-label="ค่าบริการเสริม"
             />
             <input
@@ -1362,7 +1440,7 @@ function AddOnEditor({
                 onChange={(event) => onChange({ price: toNumber(event.target.value) })}
                 disabled={disabled}
                 placeholder="ราคา"
-                className="h-7 rounded-md border border-gray-200 bg-white px-2 text-right text-[11px] font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-gray-200 disabled:border-gray-100 disabled:bg-white disabled:text-gray-800"
+                className="h-6.5 rounded-md border border-slate-200 bg-white px-2 text-right font-mono text-[11px] font-semibold text-slate-800 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300 disabled:border-slate-100 disabled:bg-white disabled:text-slate-800"
                 aria-label="ราคาบริการเสริม"
             />
             {!disabled && onDelete && (
@@ -1370,9 +1448,9 @@ function AddOnEditor({
                     type="button"
                     onClick={onDelete}
                     title="ลบบริการเสริม"
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                    className="flex h-6.5 w-6.5 items-center justify-center rounded-md border border-rose-200/80 bg-white text-rose-500 transition hover:bg-rose-50 hover:text-rose-700"
                 >
-                    <Trash2 size={13} />
+                    <Trash2 size={12} />
                 </button>
             )}
         </div>
@@ -1401,13 +1479,13 @@ function IssueReplyBox({
     compact?: boolean;
 }) {
     return (
-        <div className={`mt-2 rounded-md border border-amber-100 bg-amber-50/60 ${compact ? "p-2" : "p-2.5"}`}>
+        <div className={`mt-2 rounded-xl border border-amber-200/80 bg-amber-50/40 ${compact ? "p-2" : "p-2.5"}`}>
             <div className={`grid gap-2 ${compact ? "lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)]"}`}>
                 <div className="min-w-0 text-[11px]">
-                    <p className="font-bold text-amber-900">แจ้งปัญหา</p>
-                    <p className="mt-0.5 whitespace-pre-line leading-4 text-amber-800">{reason || "ไม่มีข้อความจากลูกค้า"}</p>
+                    <p className="font-semibold text-amber-900">แจ้งปัญหาจากลูกค้า</p>
+                    <p className="mt-0.5 whitespace-pre-line leading-relaxed text-amber-800">{reason || "ไม่มีข้อความจากลูกค้า"}</p>
                     {reportedAt && (
-                        <p className="mt-0.5 text-[10px] text-amber-600">
+                        <p className="mt-1 text-[10px] text-amber-600">
                             {new Date(reportedAt).toLocaleString("th-TH")}
                         </p>
                     )}
@@ -1417,20 +1495,20 @@ function IssueReplyBox({
                         value={draftValue}
                         onChange={(event) => onDraftChange(event.target.value)}
                         rows={compact ? 2 : 3}
-                        className="w-full resize-y rounded-md border border-amber-200 bg-white px-2 py-1.5 text-[11px] text-gray-800 outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
-                        placeholder="ตอบกลับลูกค้า"
+                        className="w-full resize-y rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-[11px] text-slate-800 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+                        placeholder="ตอบกลับลูกค้า..."
                     />
                     <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <span className="truncate text-[10px] text-gray-500">
+                        <span className="truncate text-[10px] text-slate-400">
                             {repliedAt ? `ตอบล่าสุด ${new Date(repliedAt).toLocaleString("th-TH")}` : reply ? "มีข้อความตอบกลับแล้ว" : "ยังไม่ได้ตอบ"}
                         </span>
                         <button
                             type="button"
                             onClick={onSave}
                             disabled={isSaving}
-                            className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md bg-amber-700 px-2.5 text-[11px] font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-6.5 shrink-0 items-center justify-center gap-1 rounded-md bg-amber-700 px-2.5 text-[11px] font-medium text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {isSaving && <Loader2 size={11} className="animate-spin" />}
+                            {isSaving && <Loader2 size={10} className="animate-spin" />}
                             บันทึก
                         </button>
                     </div>
@@ -1441,5 +1519,9 @@ function IssueReplyBox({
 }
 
 function ShoppingBagFallback() {
-    return <Package size={40} className="mx-auto text-gray-300" />;
+    return (
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <Package size={22} />
+        </div>
+    );
 }

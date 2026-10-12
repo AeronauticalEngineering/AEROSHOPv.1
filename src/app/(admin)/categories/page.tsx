@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
-import { AlertTriangle, CheckCircle, Edit3, Image as ImageIcon, Loader2, Plus, Save, Tag, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle, Edit3, Image as ImageIcon, Loader2, Plus, Save, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { ProductCategory } from "@/types/category";
 import { Product, ProductGuide } from "@/types/product";
@@ -60,6 +60,7 @@ export default function AdminCategoriesPage() {
     const [form, setForm] = useState<CategoryForm>(emptyForm);
     const [imageError, setImageError] = useState("");
     const [error, setError] = useState("");
+    const [categorySearch, setCategorySearch] = useState("");
 
     useEffect(() => {
         const q = query(collection(db, "categories"), orderBy("sortOrder", "asc"), orderBy("name", "asc"));
@@ -105,9 +106,16 @@ export default function AdminCategoriesPage() {
         return {
             total: categories.length,
             active: categories.filter((category) => category.isActive !== false).length,
-            withNotice: categories.filter((category) => category.noticeText?.trim()).length
+            withNotice: categories.filter((category) => category.noticeText?.trim()).length,
+            guidesCount: productGuides.length
         };
-    }, [categories]);
+    }, [categories, productGuides]);
+
+    const filteredCategories = useMemo(() => {
+        if (!categorySearch.trim()) return categories;
+        const q = categorySearch.toLowerCase().trim();
+        return categories.filter((cat) => cat.name.toLowerCase().includes(q));
+    }, [categories, categorySearch]);
 
     const openCreate = () => {
         setEditingCategory(null);
@@ -365,100 +373,197 @@ export default function AdminCategoriesPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-4">
-            <div className="flex items-center justify-between gap-3">
+            {/* Header */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-3.5">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">หมวดหมู่สินค้า</h1>
-                    <p className="mt-1 text-sm text-gray-500">สร้างหมวดหมู่และข้อความแจ้งระเบียบสำหรับหน้าร้าน</p>
-                </div>
-                <button
-                    type="button"
-                    onClick={openCreate}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-                >
-                    <Plus size={16} />
-                    เพิ่มหมวดหมู่
-                </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <p className="text-xs text-gray-500">ทั้งหมด</p>
-                    <p className="mt-1 text-lg font-bold text-gray-900">{stats.total}</p>
-                </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <p className="text-xs text-gray-500">เปิดใช้งาน</p>
-                    <p className="mt-1 text-lg font-bold text-green-600">{stats.active}</p>
-                </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <p className="text-xs text-gray-500">มีระเบียบแจ้งเตือน</p>
-                    <p className="mt-1 text-lg font-bold text-amber-600">{stats.withNotice}</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
-                <form onSubmit={handleSubmit} className="rounded-xl border border-gray-100 bg-white">
-                    <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
-                        <Tag size={16} className="text-gray-500" />
-                        <p className="text-sm font-semibold text-gray-900">{editingCategory ? "แก้ไขหมวดหมู่" : "สร้างหมวดหมู่ใหม่"}</p>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                        <span>จัดการร้านค้า</span>
+                        <span>/</span>
+                        <span className="font-medium text-slate-900">หมวดหมู่และระเบียบ</span>
                     </div>
-                    <div className="space-y-3 p-4">
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-xl font-bold tracking-tight text-slate-900">หมวดหมู่สินค้าและระเบียบร้าน</h1>
+                        <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600">
+                            {categories.length} หมวดหมู่
+                        </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                        สร้างหมวดหมู่สินค้า กำหนดข้อความแจ้งเตือนระเบียบการสั่งซื้อ และคู่มือคำแนะนำสินค้าสำหรับหน้าร้าน
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={openCreateGuide}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                    >
+                        <BookOpen size={13} className="text-slate-500" />
+                        เพิ่มคำแนะนำสินค้า
+                    </button>
+                    <button
+                        type="button"
+                        onClick={openCreate}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-slate-800 transition"
+                    >
+                        <Plus size={14} />
+                        เพิ่มหมวดหมู่ใหม่
+                    </button>
+                </div>
+            </div>
+
+            {/* KPI Metrics */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">หมวดหมู่ทั้งหมด</span>
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                            <Tag size={12} />
+                        </div>
+                    </div>
+                    <p className="mt-1 font-mono text-lg font-bold tracking-tight text-slate-900">{stats.total}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">เปิดใช้งาน</span>
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                            <CheckCircle size={12} />
+                        </div>
+                    </div>
+                    <p className="mt-1 font-mono text-lg font-bold tracking-tight text-emerald-600">{stats.active}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">มีระเบียบแจ้งเตือน</span>
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                            <AlertTriangle size={12} />
+                        </div>
+                    </div>
+                    <p className="mt-1 font-mono text-lg font-bold tracking-tight text-amber-600">{stats.withNotice}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">คำแนะนำสินค้า</span>
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                            <BookOpen size={12} />
+                        </div>
+                    </div>
+                    <p className="mt-1 font-mono text-lg font-bold tracking-tight text-sky-700">{stats.guidesCount}</p>
+                </div>
+            </div>
+
+            {/* Main Grid: Form on Left, List on Right */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
+                {/* Form Card */}
+                <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden h-fit">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                            <Tag size={14} className="text-slate-500" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+                                {editingCategory ? "แก้ไขหมวดหมู่" : "สร้างหมวดหมู่ใหม่"}
+                            </span>
+                        </div>
+                        {editingCategory && (
+                            <button
+                                type="button"
+                                onClick={openCreate}
+                                className="text-[11px] font-medium text-slate-500 hover:text-slate-800 transition"
+                            >
+                                + สร้างใหม่
+                            </button>
+                        )}
+                    </div>
+                    <div className="space-y-3 p-3.5">
+                        {/* Name */}
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-500">ชื่อหมวดหมู่ *</label>
+                            <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                                ชื่อหมวดหมู่ <span className="text-rose-500">*</span>
+                            </label>
                             <input
                                 value={form.name}
                                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                placeholder="เช่น ชุดนักศึกษา"
+                                className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                placeholder="เช่น ชุดนักศึกษา, อุปกรณ์การเรียน"
                             />
                         </div>
+
+                        {/* Sort Order & Active */}
+                        <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                            <div>
+                                <label className="mb-1 block text-[11px] font-medium text-slate-600">ลำดับแสดงผล (Sort Order)</label>
+                                <input
+                                    type="number"
+                                    value={form.sortOrder}
+                                    onChange={(event) => setForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
+                                    className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                />
+                            </div>
+                            <label className="flex h-8 items-center gap-2 px-2.5 rounded-lg border border-slate-200/80 bg-slate-50/50 cursor-pointer select-none text-xs font-medium text-slate-700">
+                                <input
+                                    type="checkbox"
+                                    checked={form.isActive}
+                                    onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                                />
+                                เปิดใช้งาน
+                            </label>
+                        </div>
+
+                        {/* Notice Title */}
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-500">หัวข้อแจ้งเตือน</label>
+                            <label className="mb-1 block text-[11px] font-medium text-slate-600">หัวข้อแจ้งเตือนระเบียบ</label>
                             <input
                                 value={form.noticeTitle}
                                 onChange={(event) => setForm((prev) => ({ ...prev, noticeTitle: event.target.value }))}
-                                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                placeholder="เช่น อ่านก่อนสั่งซื้อ"
+                                className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+                                placeholder="เช่น โปรดอ่านก่อนสั่งซื้อ"
                             />
                         </div>
+
+                        {/* Notice Text */}
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-500">ข้อความระเบียบ</label>
+                            <label className="mb-1 block text-[11px] font-medium text-slate-600">ข้อความระเบียบ / เงื่อนไข</label>
                             <textarea
                                 value={form.noticeText}
                                 onChange={(event) => setForm((prev) => ({ ...prev, noticeText: event.target.value }))}
-                                rows={5}
-                                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                placeholder="แจ้งเงื่อนไข ขนาดสินค้า การปักชื่อ หรือระยะเวลาจัดเตรียม"
+                                rows={4}
+                                className="w-full px-2.5 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition resize-y min-h-[68px]"
+                                placeholder="แจ้งเงื่อนไข ขนาดสินค้า การปักชื่อ หรือระยะเวลาจัดเตรียมสินค้า"
                             />
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                                <label className="text-xs font-semibold text-gray-500">รูปประกอบระเบียบ</label>
+
+                        {/* Notice Image Card */}
+                        <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-2.5">
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <label className="text-[11px] font-medium text-slate-600">รูปประกอบระเบียบ</label>
                                 {(form.noticeImageBase64 || form.noticeImageUrl.trim()) && (
                                     <button
                                         type="button"
                                         onClick={clearNoticeImage}
-                                        className="text-[11px] font-semibold text-red-600 hover:text-red-700"
+                                        className="text-[10px] font-medium text-rose-600 hover:text-rose-700 transition"
                                     >
-                                        ลบรูป
+                                        ลบรูปภาพ
                                     </button>
                                 )}
                             </div>
+
                             {(form.noticeImageBase64 || form.noticeImageUrl.trim()) ? (
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-1.5">
                                     <img
                                         src={form.noticeImageBase64 || normalizeImageUrl(form.noticeImageUrl)}
                                         alt="รูปประกอบระเบียบ"
-                                        className="h-16 w-16 rounded-lg border border-gray-200 bg-white object-cover"
+                                        className="h-12 w-12 rounded-md border border-slate-100 object-cover"
                                     />
                                     <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-semibold text-gray-900">{form.noticeImageName || form.noticeImageUrl.trim() || "รูปประกอบ"}</p>
-                                        <p className="mt-0.5 text-[11px] text-gray-500">ลูกค้าจะเห็นปุ่มดูรูปในป้ายแจ้งเตือน</p>
+                                        <p className="truncate text-xs font-medium text-slate-900">
+                                            {form.noticeImageName || form.noticeImageUrl.trim() || "รูปประกอบ"}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400">จะแสดงปุ่มเปิดดูรูปในป้ายเตือนหน้าร้าน</p>
                                     </div>
                                 </div>
                             ) : (
-                                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-                                    <Upload size={14} />
-                                    แนบรูปภาพ
+                                <label className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+                                    <Upload size={13} className="text-slate-500" />
+                                    แนบไฟล์รูปภาพ
                                     <input
                                         type="file"
                                         accept="image/*"
@@ -467,52 +572,33 @@ export default function AdminCategoriesPage() {
                                     />
                                 </label>
                             )}
+
                             <div className="mt-2">
-                                <label className="mb-1 block text-[11px] font-semibold text-gray-500">หรือใส่ลิงก์รูปภาพ</label>
                                 <input
                                     type="url"
                                     value={form.noticeImageUrl}
                                     onChange={(event) => setForm((prev) => ({ ...prev, noticeImageUrl: event.target.value }))}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                    placeholder="https://.../image.jpg"
+                                    className="w-full h-7 px-2 bg-white border border-slate-200 rounded-md text-[11px] font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900/10"
+                                    placeholder="หรือวาง URL รูปภาพ (https://...)"
                                 />
                             </div>
-                            <p className="mt-2 text-[10px] text-gray-400">รองรับรูปภาพไม่เกิน 700KB</p>
-                            {imageError && <p className="mt-1 text-xs font-medium text-red-600">{imageError}</p>}
-                        </div>
-                        <div className="grid grid-cols-[1fr_auto] gap-3">
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-500">ลำดับแสดงผล</label>
-                                <input
-                                    type="number"
-                                    value={form.sortOrder}
-                                    onChange={(event) => setForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
-                                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                                />
-                            </div>
-                            <label className="flex items-end gap-2 pb-2 text-xs font-semibold text-gray-600">
-                                <input
-                                    type="checkbox"
-                                    checked={form.isActive}
-                                    onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.checked }))}
-                                    className="h-4 w-4 rounded border-gray-300"
-                                />
-                                เปิดใช้งาน
-                            </label>
+                            <p className="mt-1 text-[10px] text-slate-400">ขนาดไฟล์ไม่เกิน 700KB</p>
+                            {imageError && <p className="mt-1 text-[11px] text-rose-500">{imageError}</p>}
                         </div>
 
                         {error && (
-                            <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                            <div className="rounded-lg border border-rose-200/80 bg-rose-50/60 px-3 py-2 text-xs font-medium text-rose-600">
                                 {error}
                             </div>
                         )}
 
-                        <div className="flex gap-2 pt-1">
+                        {/* Submit Buttons */}
+                        <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
                             {editingCategory && (
                                 <button
                                     type="button"
                                     onClick={openCreate}
-                                    className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                                    className="h-8 flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition"
                                 >
                                     ยกเลิก
                                 </button>
@@ -520,144 +606,229 @@ export default function AdminCategoriesPage() {
                             <button
                                 type="submit"
                                 disabled={saving}
-                                className="flex flex-[2] items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50"
+                                className="h-8 flex-[2] rounded-xl bg-slate-900 text-xs font-semibold text-white shadow-2xs hover:bg-slate-800 disabled:opacity-50 transition flex items-center justify-center gap-1.5"
                             >
-                                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                                {editingCategory ? "บันทึก" : "สร้างหมวดหมู่"}
+                                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                                {editingCategory ? "บันทึกการแก้ไข" : "สร้างหมวดหมู่"}
                             </button>
                         </div>
                     </div>
                 </form>
 
-                <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
-                        <p className="text-sm font-semibold text-gray-900">รายการหมวดหมู่</p>
-                        <p className="text-xs text-gray-500">{categories.length} รายการ</p>
+                {/* Categories List Card */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden flex flex-col">
+                    {/* List Header Toolbar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">รายการหมวดหมู่</span>
+                            <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                                {filteredCategories.length} / {categories.length}
+                            </span>
+                        </div>
+                        <div className="relative w-full sm:w-56">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
+                            <input
+                                type="text"
+                                value={categorySearch}
+                                onChange={(e) => setCategorySearch(e.target.value)}
+                                placeholder="ค้นหาชื่อหมวดหมู่..."
+                                className="w-full h-7 pl-7 pr-7 rounded-lg border border-slate-200 bg-white text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900/10"
+                            />
+                            {categorySearch && (
+                                <button
+                                    type="button"
+                                    onClick={() => setCategorySearch("")}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={11} />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
+                    {/* List Content */}
                     {loading ? (
-                        <div className="p-8 text-center text-gray-500">
-                            <Loader2 className="mx-auto mb-2 animate-spin" size={24} />
-                            <p className="text-sm">กำลังโหลด...</p>
+                        <div className="p-10 text-center text-slate-400">
+                            <Loader2 className="mx-auto mb-2 animate-spin text-slate-500" size={20} />
+                            <p className="text-xs">กำลังโหลดข้อมูลหมวดหมู่...</p>
                         </div>
-                    ) : categories.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500">
-                            <Tag size={40} className="mx-auto mb-3 text-gray-300" />
-                            <p className="text-sm font-medium">ยังไม่มีหมวดหมู่</p>
+                    ) : filteredCategories.length === 0 ? (
+                        <div className="p-10 text-center text-slate-400">
+                            <Tag size={32} className="mx-auto mb-2 text-slate-300" />
+                            <p className="text-xs font-medium text-slate-600">
+                                {categorySearch ? "ไม่พบหมวดหมู่ที่ตรงกับคำค้นหา" : "ยังไม่มีหมวดหมู่สินค้า"}
+                            </p>
+                            {categorySearch && (
+                                <button
+                                    type="button"
+                                    onClick={() => setCategorySearch("")}
+                                    className="mt-1 text-[11px] text-slate-500 underline"
+                                >
+                                    ล้างคำค้นหา
+                                </button>
+                            )}
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-100">
-                            {categories.map((category) => (
-                                <div key={category.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3">
-                                    <div className="min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <p className="font-semibold text-gray-900">{category.name}</p>
-                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${category.isActive !== false ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                                                {category.isActive !== false ? <CheckCircle size={10} /> : <X size={10} />}
-                                                {category.isActive !== false ? "เปิด" : "ปิด"}
-                                            </span>
-                                            {category.noticeText?.trim() && (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                                    <AlertTriangle size={10} />
-                                                    มีระเบียบ
+                        <div className="divide-y divide-slate-100">
+                            {filteredCategories.map((category) => {
+                                const productCount = products.filter((p) => p.category === category.name).length;
+                                return (
+                                    <div
+                                        key={category.id}
+                                        className={`flex items-start justify-between gap-3 px-4 py-3 transition hover:bg-slate-50/60 ${
+                                            editingCategory?.id === category.id ? "bg-slate-50/80" : ""
+                                        }`}
+                                    >
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500" title="ลำดับแสดงผล">
+                                                    #{category.sortOrder ?? 0}
                                                 </span>
+                                                <p className="font-semibold text-xs text-slate-900">{category.name}</p>
+                                                
+                                                {/* Product count pill */}
+                                                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-600">
+                                                    {productCount} สินค้า
+                                                </span>
+
+                                                {/* Active status pill */}
+                                                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                                    category.isActive !== false
+                                                        ? "border-emerald-200/60 bg-emerald-50 text-emerald-700"
+                                                        : "border-slate-200/60 bg-slate-100 text-slate-500"
+                                                }`}>
+                                                    {category.isActive !== false ? "เปิดใช้งาน" : "ปิด"}
+                                                </span>
+
+                                                {/* Notice pill */}
+                                                {category.noticeText?.trim() && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/60 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                                        <AlertTriangle size={9} />
+                                                        มีระเบียบ
+                                                    </span>
+                                                )}
+
+                                                {/* Image pill */}
+                                                {(category.noticeImageBase64 || category.noticeImageUrl?.trim()) && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-200/60 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                                        <ImageIcon size={9} />
+                                                        มีรูป
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Notice Preview */}
+                                            {category.noticeText?.trim() && (
+                                                <p className="line-clamp-1 text-[11px] text-slate-500">
+                                                    <span className="font-medium text-slate-700">{category.noticeTitle || "ข้อความแจ้งเตือน"}:</span>{" "}
+                                                    {category.noticeText}
+                                                </p>
                                             )}
                                         </div>
-                                        {category.noticeText?.trim() && (
-                                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">
-                                                {category.noticeTitle || "อ่านก่อนสั่งซื้อ"}: {category.noticeText}
-                                            </p>
-                                        )}
-                                        {(category.noticeImageBase64 || category.noticeImageUrl?.trim()) && (
-                                            <div className="mt-2 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-600">
-                                                <ImageIcon size={12} />
-                                                มีรูปประกอบ
-                                            </div>
-                                        )}
+
+                                        <div className="flex items-center gap-1 pt-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => openEdit(category)}
+                                                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                                title="แก้ไขหมวดหมู่"
+                                            >
+                                                <Edit3 size={13} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDeleteTarget(category)}
+                                                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                                title="ลบหมวดหมู่"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => openEdit(category)}
-                                            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                                        >
-                                            <Edit3 size={15} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setDeleteTarget(category)}
-                                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                                        >
-                                            <Trash2 size={15} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
+            {/* Product Guides Section (คู่มือคำแนะนำสินค้า) */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
                     <div>
-                        <p className="text-sm font-semibold text-gray-900">รายการคำแนะนำสินค้า</p>
-                        <p className="text-xs text-gray-400">สร้างไว้แล้วเลือกใช้จาก dropdown ในฟอร์มสินค้า</p>
+                        <div className="flex items-center gap-2">
+                            <BookOpen size={14} className="text-slate-500" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+                                รายการคำแนะนำสินค้า (Product Guides)
+                            </span>
+                            <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                                {productGuides.length} รายการ
+                            </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                            สร้างไว้ครั้งเดียว แล้วเลือกใช้จาก Dropdown ในหน้าจัดการสินค้า เพื่อแสดงคำแนะนำ/วิธีวัดไซซ์ให้ลูกค้า
+                        </p>
                     </div>
                     <button
                         type="button"
                         onClick={openCreateGuide}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+                        className="inline-flex h-7.5 items-center gap-1 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs transition self-start sm:self-auto"
                     >
-                        <Plus size={13} />
-                        เพิ่มคำแนะนำ
+                        <Plus size={12} className="text-slate-500" />
+                        เพิ่มคำแนะนำใหม่
                     </button>
                 </div>
+
                 {productGuides.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-gray-400">
-                        ยังไม่มีคำแนะนำสินค้า
+                    <div className="p-8 text-center text-slate-400">
+                        <BookOpen size={28} className="mx-auto mb-1.5 text-slate-300" />
+                        <p className="text-xs">ยังไม่มีคู่มือคำแนะนำสินค้า</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-slate-100">
                         {productGuides.map((guide) => {
                             const usedCount = products.filter((product) => product.guideId === guide.id).length;
                             return (
-                                <div key={guide.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3">
-                                    <div className="min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <p className="font-semibold text-sm text-gray-900">{guide.title}</p>
-                                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${guide.isActive !== false ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                                                {guide.isActive !== false ? "เปิด" : "ปิด"}
+                                <div key={guide.id} className="flex items-start justify-between gap-3 px-4 py-3 transition hover:bg-slate-50/60">
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <p className="font-semibold text-xs text-slate-900">{guide.title}</p>
+                                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                                guide.isActive !== false
+                                                    ? "border-emerald-200/60 bg-emerald-50 text-emerald-700"
+                                                    : "border-slate-200/60 bg-slate-100 text-slate-500"
+                                            }`}>
+                                                {guide.isActive !== false ? "เปิดใช้งาน" : "ปิด"}
                                             </span>
                                             {(guide.imageBase64 || guide.imageUrl?.trim()) && (
-                                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
-                                                    มีรูป
+                                                <span className="rounded-full border border-sky-200/60 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                                    มีรูปประกอบ
                                                 </span>
                                             )}
-                                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-600">
                                                 ใช้กับ {usedCount} สินค้า
                                             </span>
                                         </div>
                                         {guide.text && (
-                                            <p className="mt-1 line-clamp-1 text-xs text-gray-500">{guide.text}</p>
+                                            <p className="line-clamp-1 text-[11px] text-slate-500">{guide.text}</p>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 pt-0.5">
                                         <button
                                             type="button"
                                             onClick={() => openEditGuide(guide)}
-                                            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                                             title="แก้ไขคำแนะนำ"
                                         >
-                                            <Edit3 size={14} />
+                                            <Edit3 size={13} />
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setDeleteGuideTarget(guide)}
-                                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
                                             title="ลบคำแนะนำ"
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={13} />
                                         </button>
                                     </div>
                                 </div>
@@ -667,175 +838,224 @@ export default function AdminCategoriesPage() {
                 )}
             </div>
 
+            {/* Product Guide Modal */}
             {isGuideModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-                    <form onSubmit={saveProductGuide} className="w-full overflow-hidden rounded-t-xl bg-white shadow-2xl sm:max-w-md sm:rounded-xl">
-                        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                            <div>
-                                <h3 className="text-sm font-semibold text-gray-900">{editingGuide ? "แก้ไขคำแนะนำสินค้า" : "เพิ่มคำแนะนำสินค้า"}</h3>
-                                <p className="mt-0.5 text-xs text-gray-400">สร้างครั้งเดียว แล้วเลือกใช้ได้หลายสินค้า</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+                    <form onSubmit={saveProductGuide} className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                                    <BookOpen size={13} />
+                                </span>
+                                <div>
+                                    <h3 className="text-xs font-semibold text-slate-900">
+                                        {editingGuide ? "แก้ไขคำแนะนำสินค้า" : "เพิ่มคำแนะนำสินค้า"}
+                                    </h3>
+                                </div>
                             </div>
-                            <button type="button" onClick={closeGuideModal} className="rounded p-1 hover:bg-gray-100">
-                                <X size={18} />
+                            <button
+                                type="button"
+                                onClick={closeGuideModal}
+                                className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                            >
+                                <X size={14} />
                             </button>
                         </div>
-                        <div className="space-y-3 bg-gray-50 p-5">
+                        <div className="space-y-3 p-4">
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-500">หัวข้อคำแนะนำ *</label>
+                                <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                                    หัวข้อคำแนะนำ <span className="text-rose-500">*</span>
+                                </label>
                                 <input
                                     value={guideForm.title}
                                     onChange={(event) => setGuideForm((prev) => ({ ...prev, title: event.target.value }))}
-                                    placeholder="เช่น วิธีวัดไซซ์ / อ่านก่อนสั่งซื้อ"
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-500/10"
+                                    placeholder="เช่น วิธีวัดไซซ์เสื้อ / ข้อควรรู้ก่อนสั่ง"
+                                    className="w-full h-8 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
                                 />
                             </div>
                             <div>
-                                <label className="mb-1 block text-xs font-semibold text-gray-500">ข้อความคำแนะนำ</label>
+                                <label className="mb-1 block text-[11px] font-medium text-slate-600">ข้อความคำแนะนำ</label>
                                 <textarea
                                     value={guideForm.text}
                                     onChange={(event) => setGuideForm((prev) => ({ ...prev, text: event.target.value }))}
                                     rows={4}
-                                    placeholder="ระบุคำแนะนำ เช่น วิธีเลือกไซซ์ วิธีส่งชื่อปัก หรือข้อควรทราบ"
-                                    className="min-h-[80px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-500/10"
+                                    placeholder="ระบุคำแนะนำ เช่น วิธีเลือกไซซ์ วิธีแจ้งชื่อปัก หรือข้อควรทราบ"
+                                    className="w-full px-2.5 py-1.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition resize-y min-h-[70px]"
                                 />
                             </div>
-                            <div>
-                                <div className="mb-2 flex items-center justify-between">
-                                    <label className="text-xs font-semibold text-gray-500">รูปคำแนะนำ</label>
+                            <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-2.5">
+                                <div className="mb-1.5 flex items-center justify-between">
+                                    <label className="text-[11px] font-medium text-slate-600">รูปภาพประกอบ</label>
                                     {(guideForm.imageBase64 || guideForm.imageUrl.trim()) && (
-                                        <button type="button" onClick={clearGuideImage} className="text-[11px] font-semibold text-red-600 hover:text-red-700">
+                                        <button
+                                            type="button"
+                                            onClick={clearGuideImage}
+                                            className="text-[10px] font-medium text-rose-600 hover:text-rose-700 transition"
+                                        >
                                             ลบรูป
                                         </button>
                                     )}
                                 </div>
                                 {(guideForm.imageBase64 || guideForm.imageUrl.trim()) ? (
-                                    <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-2">
-                                        <img src={guideForm.imageBase64 || normalizeImageUrl(guideForm.imageUrl)} alt="รูปคำแนะนำสินค้า" className="h-14 w-14 rounded-lg border border-gray-100 object-cover" />
+                                    <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-1.5">
+                                        <img
+                                            src={guideForm.imageBase64 || normalizeImageUrl(guideForm.imageUrl)}
+                                            alt="รูปคำแนะนำสินค้า"
+                                            className="h-12 w-12 rounded-md border border-slate-100 object-cover"
+                                        />
                                         <div className="min-w-0 flex-1">
-                                            <p className="truncate text-xs font-semibold text-gray-900">{guideForm.imageName || guideForm.imageUrl.trim() || "รูปคำแนะนำสินค้า"}</p>
-                                            <p className="text-[11px] text-gray-400">จะแสดงใน modal คำแนะนำสินค้า</p>
+                                            <p className="truncate text-xs font-medium text-slate-900">
+                                                {guideForm.imageName || guideForm.imageUrl.trim() || "รูปคำแนะนำ"}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">แสดงใน Modal คำแนะนำหน้าร้าน</p>
                                         </div>
                                     </div>
                                 ) : (
-                                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-sky-200 bg-white px-3 py-3 text-xs font-semibold text-sky-700 hover:bg-sky-50">
-                                        <Upload size={14} />
-                                        แนบรูปคำแนะนำ
+                                    <label className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+                                        <Upload size={13} className="text-slate-500" />
+                                        แนบรูปภาพ
                                         <input type="file" accept="image/*" className="hidden" onChange={handleGuideImageChange} />
                                     </label>
                                 )}
                                 <div className="mt-2">
-                                    <label className="mb-1 block text-[11px] font-semibold text-gray-500">หรือใส่ลิงก์รูปภาพ</label>
                                     <input
                                         type="url"
                                         value={guideForm.imageUrl}
                                         onChange={(event) => setGuideForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
-                                        placeholder="https://.../image.jpg"
-                                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-500/10"
+                                        placeholder="หรือวางลิงก์รูปภาพ (https://...)"
+                                        className="w-full h-7 px-2 bg-white border border-slate-200 rounded-md text-[11px] font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900/10"
                                     />
                                 </div>
-                                <p className="mt-1 text-[10px] text-gray-400">รองรับรูปภาพไม่เกิน 700KB</p>
+                                <p className="mt-1 text-[10px] text-slate-400">ขนาดไฟล์ไม่เกิน 700KB</p>
                             </div>
-                            <label className="flex items-center gap-2 text-xs font-semibold text-gray-600">
+                            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={guideForm.isActive}
                                     onChange={(event) => setGuideForm((prev) => ({ ...prev, isActive: event.target.checked }))}
-                                    className="h-4 w-4 rounded border-gray-300"
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
                                 />
-                                เปิดใช้งาน
+                                เปิดใช้งานคำแนะนำนี้
                             </label>
                             {guideError && (
-                                <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                                <div className="rounded-lg border border-rose-200/80 bg-rose-50/60 px-3 py-2 text-xs font-medium text-rose-600">
                                     {guideError}
                                 </div>
                             )}
                         </div>
-                        <div className="flex gap-3 border-t border-gray-100 bg-white p-4">
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5">
                             <button
                                 type="button"
                                 onClick={closeGuideModal}
-                                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                className="h-7.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
                                 disabled={guideSaving}
                             >
-                                ปิด
+                                ยกเลิก
                             </button>
                             <button
                                 type="submit"
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50"
+                                className="h-7.5 px-3 rounded-lg bg-slate-900 text-xs font-semibold text-white shadow-2xs hover:bg-slate-800 disabled:opacity-50 transition flex items-center gap-1.5"
                                 disabled={guideSaving}
                             >
-                                {guideSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                                {editingGuide ? "บันทึก" : "เพิ่ม"}
+                                {guideSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                {editingGuide ? "บันทึกการแก้ไข" : "เพิ่มคำแนะนำ"}
                             </button>
                         </div>
                     </form>
                 </div>
             )}
 
+            {/* Delete Guide Confirmation Modal */}
             {deleteGuideTarget && (
-                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-                    <div className="w-full overflow-hidden rounded-t-xl bg-white shadow-2xl sm:max-w-md sm:rounded-xl">
-                        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
-                            <h3 className="text-sm font-semibold text-gray-900">ลบคำแนะนำสินค้า</h3>
-                            <button type="button" onClick={closeDeleteGuideConfirm} className="rounded p-1 hover:bg-gray-100">
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="space-y-2 bg-gray-50 p-5">
-                            <p className="text-sm text-gray-700">
-                                ต้องการลบคำแนะนำ “{deleteGuideTarget.title}” ใช่หรือไม่?
-                            </p>
-                            <p className="text-xs text-red-600">
-                                สินค้าที่เลือกคำแนะนำนี้จะถูกล้างคำแนะนำออกโดยอัตโนมัติ
-                            </p>
-                        </div>
-                        <div className="flex gap-3 border-t border-gray-100 bg-white p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+                    <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                                    <Trash2 size={13} />
+                                </span>
+                                <h3 className="text-xs font-semibold text-slate-900">ยืนยันการลบคำแนะนำ</h3>
+                            </div>
                             <button
                                 type="button"
                                 onClick={closeDeleteGuideConfirm}
-                                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-1.5">
+                            <p className="text-xs text-slate-700">
+                                ต้องการลบคำแนะนำ <span className="font-semibold text-slate-900">&quot;{deleteGuideTarget.title}&quot;</span> ใช่หรือไม่?
+                            </p>
+                            <p className="text-[11px] text-rose-500">
+                                สินค้าที่เคยผูกคำแนะนำนี้จะถูกล้างค่าออกโดยอัตโนมัติ
+                            </p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5">
+                            <button
+                                type="button"
+                                onClick={closeDeleteGuideConfirm}
+                                className="h-7.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
                                 disabled={deletingGuideId === deleteGuideTarget.id}
                             >
-                                ปิด
+                                ยกเลิก
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmDeleteGuide}
-                                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                                className="h-7.5 px-3 rounded-lg bg-rose-600 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 disabled:opacity-50 transition flex items-center gap-1.5"
                                 disabled={deletingGuideId === deleteGuideTarget.id}
                             >
-                                {deletingGuideId === deleteGuideTarget.id && <Loader2 size={16} className="animate-spin" />}
-                                ลบ
+                                {deletingGuideId === deleteGuideTarget.id && <Loader2 size={12} className="animate-spin" />}
+                                {deletingGuideId === deleteGuideTarget.id ? "กำลังลบ..." : "ลบคำแนะนำ"}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* Delete Category Confirmation Modal */}
             {deleteTarget && (
-                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-                    <div className="w-full rounded-t-xl bg-white shadow-2xl sm:max-w-md sm:rounded-xl">
-                        <div className="border-b border-gray-100 px-5 py-4">
-                            <h3 className="text-sm font-semibold text-gray-900">ลบหมวดหมู่</h3>
-                        </div>
-                        <div className="space-y-2 bg-gray-50 p-5">
-                            <p className="text-sm text-gray-700">ต้องการลบหมวดหมู่ “{deleteTarget.name}” ใช่หรือไม่?</p>
-                            <p className="text-xs text-red-600">สินค้าที่เคยใช้ชื่อหมวดหมู่นี้จะยังคงชื่อเดิมไว้</p>
-                        </div>
-                        <div className="flex gap-3 border-t border-gray-100 p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+                    <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3">
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                                    <Trash2 size={13} />
+                                </span>
+                                <h3 className="text-xs font-semibold text-slate-900">ยืนยันการลบหมวดหมู่</h3>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setDeleteTarget(null)}
-                                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                                className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
                             >
-                                ปิด
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-1.5">
+                            <p className="text-xs text-slate-700">
+                                ต้องการลบหมวดหมู่ <span className="font-semibold text-slate-900">&quot;{deleteTarget.name}&quot;</span> ใช่หรือไม่?
+                            </p>
+                            <p className="text-[11px] text-rose-500">
+                                สินค้าที่มีอยู่ในหมวดหมู่นี้จะไม่ถูกลบ แต่จะยังคงชื่อหมวดหมู่เดิมไว้
+                            </p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5">
+                            <button
+                                type="button"
+                                onClick={() => setDeleteTarget(null)}
+                                className="h-7.5 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                            >
+                                ยกเลิก
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmDelete}
-                                className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700"
+                                className="h-7.5 px-3 rounded-lg bg-rose-600 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 transition"
                             >
-                                ลบ
+                                ลบหมวดหมู่
                             </button>
                         </div>
                     </div>

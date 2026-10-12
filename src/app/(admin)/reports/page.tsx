@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { collection, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Order, OrderStatus } from "@/types/order";
 import { formatOrderId } from "@/lib/orderId";
-import { BarChart3, CalendarDays, Download, Package, ReceiptText, ShoppingBag, TrendingUp, X } from "lucide-react";
+import {
+    BarChart3,
+    CalendarDays,
+    Download,
+    Package,
+    ReceiptText,
+    ShoppingBag,
+    TrendingUp,
+    X,
+    Filter
+} from "lucide-react";
 
 type ReportOrder = Order & {
     paymentMethod?: string;
@@ -24,6 +35,17 @@ type ProductReportRow = {
     quantity: number;
     grossSales: number;
     orderCount: number;
+};
+
+type SlipDoc = {
+    id: string;
+    orderId?: string;
+    verifyStatus?: string;
+    verifyMessage?: string;
+    verifiedAt?: unknown;
+    createdAt?: unknown;
+    imageUrl?: string;
+    base64?: string;
 };
 
 const revenueStatuses: OrderStatus[] = ["paid", "shipped", "completed"];
@@ -103,7 +125,7 @@ const formatItemAddOns = (item: Order["items"][number]) => {
             text += ` (${bundleItem.variantName})`;
         }
         text += ` x${bundleItem.quantity || 1}`;
-        
+
         const bundleAddOns = formatAddOns(bundleItem.selectedAddOns);
         if (bundleAddOns) {
             text += ` + [${bundleAddOns}]`;
@@ -132,37 +154,37 @@ const ORDER_COLUMNS = [
     { key: "status", label: "สถานะคำสั่งซื้อ (Status)", getValue: (order: ReportOrder) => order.status },
     { key: "paymentMethod", label: "ช่องทางการชำระเงิน (Payment Method)", getValue: (order: ReportOrder) => order.paymentMethod || "" },
     { key: "paymentStatus", label: "สถานะชำระเงิน (Payment Status)", getValue: (order: ReportOrder) => order.paymentStatus || "" },
-    { 
-        key: "paymentDetail", 
-        label: "รายละเอียดการชำระเงิน (Payment Detail)", 
-        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+    {
+        key: "paymentDetail",
+        label: "รายละเอียดการชำระเงิน (Payment Detail)",
+        getValue: (order: ReportOrder, slipsMap?: Map<string, SlipDoc>) => {
             if (order.paymentDetail) return order.paymentDetail;
             const slip = slipsMap?.get(order.id);
             if (slip?.verifyMessage) return slip.verifyMessage;
             if (order.paymentStatus === "verified") return "ตรวจสอบผ่าน SlipOK";
             return "";
-        } 
+        }
     },
-    { 
-        key: "paidAt", 
-        label: "เวลาชำระเงิน (Payment Time)", 
-        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+    {
+        key: "paidAt",
+        label: "เวลาชำระเงิน (Payment Time)",
+        getValue: (order: ReportOrder, slipsMap?: Map<string, SlipDoc>) => {
             const rawPaidAt = order.paidAt || order.paymentVerifiedAt;
             if (rawPaidAt) return toDate(rawPaidAt).toLocaleString("th-TH");
             const slip = slipsMap?.get(order.id);
             if (slip?.verifiedAt) return toDate(slip.verifiedAt).toLocaleString("th-TH");
             if (slip?.createdAt) return toDate(slip.createdAt).toLocaleString("th-TH");
             return "";
-        } 
+        }
     },
-    { 
-        key: "slipUrl", 
-        label: "ลิงก์รูปสลิป (Slip URL)", 
-        getValue: (order: ReportOrder, slipsMap?: Map<string, any>) => {
+    {
+        key: "slipUrl",
+        label: "ลิงก์รูปสลิป (Slip URL)",
+        getValue: (order: ReportOrder, slipsMap?: Map<string, SlipDoc>) => {
             if (order.slipUrl) return order.slipUrl;
             const slip = slipsMap?.get(order.id);
             return slip?.imageUrl || slip?.base64 || "";
-        } 
+        }
     },
     { key: "itemsCount", label: "จำนวนรายการสินค้า (Items)", getValue: (order: ReportOrder) => (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0) },
     { key: "addOns", label: "รายละเอียดสินค้าและท็อปปิ้ง (Add-ons)", getValue: (order: ReportOrder) => formatOrderAddOns(order) },
@@ -180,7 +202,8 @@ export default function AdminReportsPage() {
     const [statusFilter, setStatusFilter] = useState<"revenue" | "all" | OrderStatus>("revenue");
     const [selectedColumns, setSelectedColumns] = useState<string[]>(ORDER_COLUMNS.map(c => c.key));
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-    const [slips, setSlips] = useState<any[]>([]);
+    const [slips, setSlips] = useState<SlipDoc[]>([]);
+    const [selectedProductKey, setSelectedProductKey] = useState<string | null>(null);
 
     useEffect(() => {
         const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -208,14 +231,14 @@ export default function AdminReportsPage() {
             const items = snapshot.docs.map((docSnap) => ({
                 id: docSnap.id,
                 ...docSnap.data()
-            }));
+            })) as SlipDoc[];
             setSlips(items);
         });
         return () => unsubscribe();
     }, []);
 
     const slipsMap = useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, SlipDoc>();
         slips.forEach(slip => {
             if (slip.orderId) {
                 if (!map.has(slip.orderId) || slip.verifyStatus === "verified") {
@@ -290,6 +313,23 @@ export default function AdminReportsPage() {
         return Array.from(map.values()).sort((a, b) => b.grossSales - a.grossSales);
     }, [filteredOrders]);
 
+    const selectedProduct = useMemo(() => {
+        if (!selectedProductKey) return null;
+        return productRows.find((p) => p.key === selectedProductKey) || null;
+    }, [productRows, selectedProductKey]);
+
+    const displayedOrders = useMemo(() => {
+        if (!selectedProduct) return filteredOrders;
+        return filteredOrders.filter((order) =>
+            (order.items || []).some((item) => {
+                const variantInfo = typeof item.variantInfo === "string" ? item.variantInfo : "";
+                const addOns = formatItemAddOns(item);
+                const key = `${item.productId || item.productName}|${variantInfo}|${addOns}`;
+                return key === selectedProduct.key;
+            })
+        );
+    }, [filteredOrders, selectedProduct]);
+
     const exportOrdersCsv = () => {
         const activeColumns = ORDER_COLUMNS.filter(c => selectedColumns.includes(c.key));
         if (activeColumns.length === 0) {
@@ -319,269 +359,398 @@ export default function AdminReportsPage() {
     };
 
     return (
-        <div className="mx-auto max-w-7xl space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-7xl mx-auto space-y-3.5 pb-10 font-sans antialiased text-slate-800">
+            {/* Header & Export Actions: Clean & Zero-Noise */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-1 border-b border-slate-200/60">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">รายงาน</h1>
-                    <p className="mt-1 text-sm text-gray-500">สรุปยอดขายและสินค้าขายดีจากคำสั่งซื้อ</p>
+                    <h1 className="text-lg font-bold tracking-tight text-slate-900">รายงานยอดขาย & สินค้า</h1>
+                    <p className="text-xs text-slate-500 mt-0.5">วิเคราะห์ยอดขาย สินค้าขายดี และส่งออกข้อมูลเป็น CSV</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5">
                     <button
                         type="button"
                         onClick={() => setIsExportModalOpen(true)}
                         disabled={filteredOrders.length === 0}
-                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 cursor-pointer shadow-2xs transition-colors"
                     >
-                        <Download size={16} />
-                        Export คำสั่งซื้อ
+                        <Download size={13} />
+                        <span>Export ออเดอร์</span>
                     </button>
                     <button
                         type="button"
                         onClick={exportProductsCsv}
                         disabled={productRows.length === 0}
-                        className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40 cursor-pointer shadow-2xs transition-colors"
                     >
-                        <Download size={16} />
-                        Export สินค้า
+                        <Download size={13} />
+                        <span>Export สินค้า</span>
                     </button>
                 </div>
             </div>
 
-            <section className="rounded-xl border border-gray-100 bg-white p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_220px]">
-                    <label className="text-xs font-semibold text-gray-500">
-                        วันที่เริ่มต้น
-                        <div className="mt-1 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                            <CalendarDays size={16} className="text-gray-400" />
+            {/* Filter Toolbar (Clean Horizontal Strip) */}
+            <section className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                    <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-1">วันที่เริ่มต้น</span>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50/70 border border-slate-200/80 rounded-lg">
+                            <CalendarDays size={14} className="text-slate-400 shrink-0" />
                             <input
                                 type="date"
                                 value={startDate}
-                                onChange={(event) => setStartDate(event.target.value)}
-                                className="w-full bg-transparent text-sm text-gray-900 outline-none"
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none cursor-pointer"
                             />
                         </div>
-                    </label>
-                    <label className="text-xs font-semibold text-gray-500">
-                        วันที่สิ้นสุด
-                        <div className="mt-1 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                            <CalendarDays size={16} className="text-gray-400" />
+                    </div>
+                    <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-1">วันที่สิ้นสุด</span>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50/70 border border-slate-200/80 rounded-lg">
+                            <CalendarDays size={14} className="text-slate-400 shrink-0" />
                             <input
                                 type="date"
                                 value={endDate}
-                                onChange={(event) => setEndDate(event.target.value)}
-                                className="w-full bg-transparent text-sm text-gray-900 outline-none"
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none cursor-pointer"
                             />
                         </div>
-                    </label>
-                    <label className="text-xs font-semibold text-gray-500">
-                        สถานะ
-                        <select
-                            value={statusFilter}
-                            onChange={(event) => setStatusFilter(event.target.value as "revenue" | "all" | OrderStatus)}
-                            className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none"
-                        >
-                            <option value="revenue">นับยอดขาย</option>
-                            <option value="all">ทุกสถานะ</option>
-                            <option value="pending">รอชำระ</option>
-                            <option value="paid">ชำระแล้ว</option>
-                            <option value="shipped">จัดส่งแล้ว</option>
-                            <option value="completed">สำเร็จ</option>
-                            <option value="cancelled">ยกเลิก</option>
-                            <option value="returned">คืนสินค้า</option>
-                        </select>
-                    </label>
+                    </div>
+                    <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-1">สถานะคำสั่งซื้อ</span>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50/70 border border-slate-200/80 rounded-lg">
+                            <Filter size={14} className="text-slate-400 shrink-0" />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value as "revenue" | "all" | OrderStatus)}
+                                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none cursor-pointer"
+                            >
+                                <option value="revenue">นับยอดขาย (สำเร็จ/ชำระแล้ว/จัดส่ง)</option>
+                                <option value="all">ทุกสถานะทั้งหมด</option>
+                                <option value="pending">รอชำระ (Pending)</option>
+                                <option value="paid">ชำระแล้ว (Paid)</option>
+                                <option value="shipped">จัดส่งแล้ว (Shipped)</option>
+                                <option value="completed">สำเร็จ (Completed)</option>
+                                <option value="cancelled">ยกเลิก (Cancelled)</option>
+                                <option value="returned">คืนสินค้า (Returned)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </section>
 
-            <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <TrendingUp size={15} />
-                        ยอดขาย
+            {/* KPI Stat Cards (5 Compact Cards) */}
+            <section className="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>ยอดขายสุทธิ</span>
+                        <TrendingUp size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{formatMoney(stats.totalSales)}</p>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-slate-900">{formatMoney(stats.totalSales)}</p>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <ReceiptText size={15} />
-                        ออเดอร์
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>จำนวนออเดอร์</span>
+                        <ReceiptText size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{stats.orderCount.toLocaleString()}</p>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-slate-900">{stats.orderCount.toLocaleString()} <span className="text-xs font-normal text-slate-400">รายการ</span></p>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <Package size={15} />
-                        จำนวนสินค้า
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>สินค้าที่ขายได้</span>
+                        <Package size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{stats.totalItems.toLocaleString()}</p>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-slate-900">{stats.totalItems.toLocaleString()} <span className="text-xs font-normal text-slate-400">ชิ้น</span></p>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <BarChart3 size={15} />
-                        เฉลี่ย/ออเดอร์
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>ยอดเฉลี่ย / ออเดอร์</span>
+                        <BarChart3 size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{formatMoney(Math.round(stats.averageOrderValue))}</p>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-slate-900">{formatMoney(Math.round(stats.averageOrderValue))}</p>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <ShoppingBag size={15} />
-                        ส่วนลด
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs col-span-2 lg:col-span-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                        <span>ส่วนลดที่ให้</span>
+                        <ShoppingBag size={13} className="text-slate-400" />
                     </div>
-                    <p className="text-xl font-bold text-red-600">{formatMoney(stats.totalDiscount)}</p>
+                    <p className="text-base sm:text-lg font-bold font-mono tracking-tight text-rose-600">{formatMoney(stats.totalDiscount)}</p>
                 </div>
             </section>
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                    <div className="border-b border-gray-100 px-4 py-3">
-                        <h2 className="text-sm font-bold text-gray-900">รายงานสินค้า</h2>
-                        <p className="mt-0.5 text-xs text-gray-500">เรียงตามยอดขายสูงสุด</p>
+            {/* Split Data View: Product Performance (Left) & Filtered Orders (Right) */}
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.3fr_0.9fr]">
+                {/* Product Performance Table */}
+                <section className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-slate-50/60 border-b border-slate-100 flex justify-between items-center gap-2">
+                        <div>
+                            <div className="flex items-center gap-1.5">
+                                <h2 className="text-xs font-bold text-slate-800">รายงานสินค้า</h2>
+                                <span className="text-[10px] text-slate-400 font-normal">({productRows.length} รายการ)</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400">คลิกที่สินค้าเพื่อดูรายการออเดอร์ของสินค้านั้น</p>
+                        </div>
+                        {selectedProduct && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedProductKey(null)}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 px-2 py-0.5 rounded border border-slate-200 transition-colors cursor-pointer"
+                            >
+                                <X size={11} />
+                                <span>ยกเลิกการเลือก</span>
+                            </button>
+                        )}
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-[680px] w-full text-sm">
-                            <thead className="bg-gray-50 text-xs text-gray-500">
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-xs">
+                            <thead className="bg-slate-50/80 text-[11px] text-slate-500 border-b border-slate-100 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-4 py-3 text-left font-semibold">สินค้า</th>
-                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">จำนวนขาย</th>
-                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">ออเดอร์</th>
-                                    <th className="px-4 py-3 text-right font-semibold whitespace-nowrap">ยอดขาย</th>
+                                    <th className="px-3.5 py-2 text-left font-semibold">สินค้า</th>
+                                    <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">จำนวนขาย</th>
+                                    <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">ออเดอร์</th>
+                                    <th className="px-3.5 py-2 text-right font-semibold whitespace-nowrap">ยอดขายรวม</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-slate-100">
                                 {loading ? (
-                                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">กำลังโหลด...</td></tr>
+                                    <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">กำลังโหลด...</td></tr>
                                 ) : productRows.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">ไม่พบข้อมูลสินค้า</td></tr>
+                                    <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">ไม่พบข้อมูลสินค้าในช่วงนี้</td></tr>
                                 ) : (
-                                    productRows.map((row) => (
-                                        <tr key={row.key} className="hover:bg-gray-50/60">
-                                            <td className="px-4 py-3">
-                                                <p className="font-semibold text-gray-900">{row.productName}</p>
-                                                {row.variantInfo && <p className="mt-0.5 text-xs text-gray-400">{row.variantInfo}</p>}
-                                                {row.addOns && <p className="mt-0.5 text-[11px] text-gray-500">{row.addOns}</p>}
-                                            </td>
-                                            <td className="px-4 py-3 text-right font-semibold text-gray-900">{row.quantity.toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-right text-gray-600">{row.orderCount.toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{formatMoney(row.grossSales)}</td>
-                                        </tr>
-                                    ))
+                                    productRows.map((row) => {
+                                        const isSelected = selectedProductKey === row.key;
+                                        return (
+                                            <tr
+                                                key={row.key}
+                                                onClick={() => setSelectedProductKey((prev) => (prev === row.key ? null : row.key))}
+                                                className={`cursor-pointer transition-colors ${
+                                                    isSelected
+                                                        ? "bg-blue-50/80 border-l-3 border-l-blue-600 font-medium"
+                                                        : "hover:bg-slate-50/60"
+                                                }`}
+                                                title="คลิกเพื่อดูออเดอร์ของสินค้านี้"
+                                            >
+                                                <td className="px-3.5 py-2 min-w-[180px]">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <p className={`text-xs ${isSelected ? "font-semibold text-blue-900" : "font-medium text-slate-900"}`}>
+                                                            {row.productName}
+                                                        </p>
+                                                        {isSelected && (
+                                                            <span className="shrink-0 text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-blue-600 text-white">
+                                                                เลือกอยู่
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {row.variantInfo && <p className="text-[10px] text-slate-400">{row.variantInfo}</p>}
+                                                    {row.addOns && <p className="text-[10px] text-slate-400 truncate max-w-xs">{row.addOns}</p>}
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-mono font-medium text-slate-800">{row.quantity.toLocaleString()}</td>
+                                                <td className="px-3 py-2 text-right font-mono text-slate-500">{row.orderCount.toLocaleString()}</td>
+                                                <td className="px-3.5 py-2 text-right font-mono font-semibold text-slate-900">{formatMoney(row.grossSales)}</td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-                    <div className="border-b border-gray-100 px-4 py-3">
-                        <h2 className="text-sm font-bold text-gray-900">คำสั่งซื้อล่าสุด</h2>
-                        <p className="mt-0.5 text-xs text-gray-500">ตามตัวกรองที่เลือก</p>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                        {loading ? (
-                            <div className="px-4 py-8 text-center text-sm text-gray-400">กำลังโหลด...</div>
-                        ) : filteredOrders.length === 0 ? (
-                            <div className="px-4 py-8 text-center text-sm text-gray-400">ไม่พบคำสั่งซื้อ</div>
-                        ) : (
-                            filteredOrders.slice(0, 12).map((order) => (
-                                <div key={order.id} className="flex items-start justify-between gap-3 px-4 py-2">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-gray-900">{formatOrderId(order, 12)}</p>
-                                        <p className="mt-0.5 truncate text-[11px] text-gray-500">{order.customerName || "-"} · {toDate(order.createdAt).toLocaleString("th-TH")}</p>
+                {/* Filtered Orders List */}
+                <section className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden flex flex-col">
+                    <div className="px-3.5 py-2.5 bg-slate-50/60 border-b border-slate-100 flex justify-between items-center gap-2">
+                        <div className="min-w-0">
+                            {selectedProduct ? (
+                                <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <h2 className="text-xs font-bold text-slate-800">ออเดอร์ของ:</h2>
+                                        <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200/60 max-w-[200px] truncate" title={selectedProduct.productName}>
+                                            {selectedProduct.productName}
+                                        </span>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-bold text-gray-900">{formatMoney(Number(order.totalAmount || 0))}</p>
-                                        <p className="mt-0.5 text-[11px] text-gray-400">{order.status}</p>
-                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">
+                                        พบ <span className="font-semibold text-slate-800">{displayedOrders.length}</span> ออเดอร์ (ขายได้ {selectedProduct.quantity} ชิ้น)
+                                    </p>
                                 </div>
-                            ))
+                            ) : (
+                                <div>
+                                    <h2 className="text-xs font-bold text-slate-800">คำสั่งซื้อในช่วงที่เลือก</h2>
+                                    <p className="text-[10px] text-slate-400">แสดงรายการล่าสุด ({displayedOrders.length} รายการ)</p>
+                                </div>
+                            )}
+                        </div>
+                        {selectedProduct && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedProductKey(null)}
+                                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                            >
+                                <X size={12} />
+                                <span>แสดงทั้งหมด</span>
+                            </button>
+                        )}
+                    </div>
+                    <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                        {loading ? (
+                            <div className="px-4 py-8 text-center text-xs text-slate-400">กำลังโหลด...</div>
+                        ) : displayedOrders.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-xs text-slate-400">
+                                {selectedProduct
+                                    ? "ไม่พบคำสั่งซื้อที่มีสินค้านี้ในช่วงสถานะที่เลือก"
+                                    : "ไม่พบคำสั่งซื้อตามตัวกรอง"}
+                            </div>
+                        ) : (
+                            displayedOrders.slice(0, 50).map((order) => {
+                                const statusConfig: Record<string, { label: string; badge: string }> = {
+                                    pending: { label: "รอชำระ", badge: "bg-amber-50 text-amber-700 border-amber-200/60" },
+                                    paid: { label: "ชำระแล้ว", badge: "bg-blue-50 text-blue-700 border-blue-200/60" },
+                                    shipped: { label: "จัดส่งแล้ว", badge: "bg-indigo-50 text-indigo-700 border-indigo-200/60" },
+                                    completed: { label: "สำเร็จ", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/60" },
+                                    cancelled: { label: "ยกเลิก", badge: "bg-rose-50 text-rose-700 border-rose-200/60" },
+                                    returned: { label: "คืนสินค้า", badge: "bg-orange-50 text-orange-700 border-orange-200/60" },
+                                };
+                                const status = statusConfig[order.status] || { label: order.status, badge: "bg-slate-50 text-slate-700 border-slate-200" };
+
+                                const matchingItems = selectedProduct
+                                    ? (order.items || []).filter((item) => {
+                                        const variantInfo = typeof item.variantInfo === "string" ? item.variantInfo : "";
+                                        const addOns = formatItemAddOns(item);
+                                        const key = `${item.productId || item.productName}|${variantInfo}|${addOns}`;
+                                        return key === selectedProduct.key;
+                                    })
+                                    : [];
+                                const matchedQty = matchingItems.reduce((s, it) => s + Number(it.quantity || 1), 0);
+
+                                return (
+                                    <Link
+                                        key={order.id}
+                                        href={`/orders/${order.id}`}
+                                        className="p-2.5 flex items-start justify-between gap-2.5 hover:bg-slate-50/70 transition-colors text-xs group block"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-mono font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">
+                                                    {formatOrderId(order, 10)}
+                                                </span>
+                                                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-medium border ${status.badge}`}>
+                                                    {status.label}
+                                                </span>
+                                                {selectedProduct && matchedQty > 0 && (
+                                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
+                                                        สินค้านี้ {matchedQty} ชิ้น
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                                                {order.customerName || "-"} · {toDate(order.createdAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
+                                            </p>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="font-mono font-bold text-slate-900">{formatMoney(Number(order.totalAmount || 0))}</p>
+                                            <span className="text-[10px] text-slate-400">
+                                                รวม {(order.items || []).reduce((s, it) => s + (it.quantity || 1), 0)} ชิ้น
+                                            </span>
+                                        </div>
+                                    </Link>
+                                );
+                            })
                         )}
                     </div>
                 </section>
             </div>
 
+            {/* Export Column Customization Modal */}
             {isExportModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white w-full max-w-lg md:max-w-3xl rounded-2xl border border-gray-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-                        {/* Header */}
-                        <div className="flex justify-between items-center px-5 py-3.5 border-b border-gray-100">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
+                    <div className="bg-white w-full max-w-lg md:max-w-2xl rounded-2xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in duration-150">
+                        {/* Modal Header */}
+                        <div className="flex justify-between items-center px-4.5 py-3 border-b border-slate-100">
                             <div>
-                                <h3 className="text-base font-bold text-gray-900">เลือกคอลัมน์สำหรับการ Export</h3>
-                                <p className="text-xs text-gray-500 mt-0.5">เลือกคอลัมน์ข้อมูลคำสั่งซื้อที่ต้องการนำออกเป็นไฟล์ CSV</p>
+                                <h3 className="text-sm font-bold text-slate-900">เลือกคอลัมน์ข้อมูลสำหรับ Export CSV</h3>
+                                <p className="text-[11px] text-slate-400 mt-0.5">เลือกฟิลด์คำสั่งซื้อที่ต้องการนำออกเป็นไฟล์สเปรดชีต</p>
                             </div>
-                            <button 
+                            <button
+                                type="button"
                                 onClick={() => setIsExportModalOpen(false)}
-                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             >
-                                <X size={18} />
+                                <X size={16} />
                             </button>
                         </div>
 
-                        {/* Body */}
-                        <div className="p-5 overflow-y-auto space-y-4">
-                            {/* Actions */}
-                            <div className="flex gap-2 text-xs font-semibold">
+                        {/* Modal Body */}
+                        <div className="p-4 overflow-y-auto space-y-3">
+                            <div className="flex items-center gap-2 text-xs">
                                 <button
+                                    type="button"
                                     onClick={() => setSelectedColumns(ORDER_COLUMNS.map(c => c.key))}
-                                    className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                    className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer transition-colors"
                                 >
-                                    เลือกทั้งหมด
+                                    เลือกทั้งหมด ({ORDER_COLUMNS.length})
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => setSelectedColumns([])}
-                                    className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                    className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer transition-colors"
                                 >
                                     ล้างทั้งหมด
                                 </button>
+                                <span className="text-[11px] text-slate-400 ml-auto font-mono">
+                                    เลือกแล้ว {selectedColumns.length} คอลัมน์
+                                </span>
                             </div>
 
-                            {/* Checkbox grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                            {/* Checkbox Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
                                 {ORDER_COLUMNS.map((col) => {
                                     const isChecked = selectedColumns.includes(col.key);
                                     return (
-                                        <label 
+                                        <label
                                             key={col.key}
-                                            className={`flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer text-xs font-medium transition-all select-none ${
-                                                isChecked 
-                                                    ? 'border-gray-900 bg-gray-50/50 text-gray-900' 
-                                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                                            className={`flex items-center gap-2 p-2 border rounded-lg cursor-pointer text-xs font-medium transition-all select-none ${
+                                                isChecked
+                                                    ? 'border-slate-800 bg-slate-50/70 text-slate-900'
+                                                    : 'border-slate-200/80 bg-white hover:bg-slate-50/50 text-slate-600'
                                             }`}
                                         >
                                             <input
                                                 type="checkbox"
                                                 checked={isChecked}
                                                 onChange={() => {
-                                                    setSelectedColumns(prev => 
+                                                    setSelectedColumns(prev =>
                                                         prev.includes(col.key)
                                                             ? prev.filter(k => k !== col.key)
                                                             : [...prev, col.key]
                                                     );
                                                 }}
-                                                className="w-4 h-4 rounded border-gray-300 text-gray-950 focus:ring-gray-900 accent-black cursor-pointer"
+                                                className="w-3.5 h-3.5 rounded border-slate-300 text-slate-900 focus:ring-0 cursor-pointer"
                                             />
-                                            {col.label}
+                                            <span className="truncate">{col.label}</span>
                                         </label>
                                     );
                                 })}
                             </div>
                         </div>
 
-                        {/* Footer */}
-                        <div className="flex gap-2 justify-end px-5 py-3.5 bg-gray-50 border-t border-gray-100">
+                        {/* Modal Footer */}
+                        <div className="flex gap-2 justify-end px-4.5 py-3 bg-slate-50/60 border-t border-slate-100">
                             <button
                                 type="button"
                                 onClick={() => setIsExportModalOpen(false)}
-                                className="px-4 py-2 border border-gray-200 bg-white text-sm font-semibold rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                                className="px-3 py-1.5 border border-slate-200 bg-white text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
                             >
                                 ยกเลิก
                             </button>
                             <button
                                 type="button"
                                 onClick={exportOrdersCsv}
-                                className="px-4 py-2 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors inline-flex items-center gap-2"
+                                className="px-3.5 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
                             >
-                                <Download size={16} />
-                                ดาวน์โหลด CSV
+                                <Download size={13} />
+                                <span>ดาวน์โหลด CSV ({selectedColumns.length} คอลัมน์)</span>
                             </button>
                         </div>
                     </div>
