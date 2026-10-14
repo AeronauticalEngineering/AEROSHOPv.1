@@ -229,21 +229,15 @@ function CheckoutSuccessContent({ orderId: orderIdOverride, sessionId: sessionId
         const receiptFlex = buildReceiptFlexMessage({
             orderId: orderId || "",
             liffId: liffId || "",
-            orderData
+            orderData: {
+                ...orderData,
+                status: isOrderPaid ? "paid" : orderData.status,
+                paymentStatus: isOrderPaid ? "verified" : orderData.paymentStatus
+            }
         });
 
-        // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลยืนยันชำระเงินตามมา
+        // ส่ง flex บิลเดียวที่สมบูรณ์ ไม่แยกส่ง 2 ข้อความ
         const messages: Array<Record<string, unknown>> = [receiptFlex as unknown as Record<string, unknown>];
-        if (isOrderPaid) {
-            messages.push(
-                buildOrderStatusFlex({
-                    status: "paid",
-                    orderId: orderId || "",
-                    amount: orderData.totalAmount,
-                    liffId: liffId || ""
-                }) as Record<string, unknown>
-            );
-        }
 
         try {
             await (liff.sendMessages as unknown as (msgs: Array<Record<string, unknown>>) => Promise<void>)(messages);

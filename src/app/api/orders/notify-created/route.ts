@@ -98,32 +98,24 @@ export async function POST(req: Request) {
     if (notifyEnabled(settings?.lineNotifyCustomerOrderSuccess) && liffId && !clientSentBill) {
       const customerLineId = await resolveCustomerLineId(db, order);
       if (customerLineId) {
-        const customerFlex = buildReceiptFlexMessage({
-          orderId,
-          liffId,
-          orderData: order
-        });
-
         const isOrderPaid =
           order.paymentStatus === "paid" ||
           order.paymentStatus === "verified" ||
           order.status === "paid" ||
           order.status === "completed";
 
-        // ลำดับที่ถูกต้อง: 1. บิลออเดอร์ก่อน 2. บิลใบเสร็จตาม
-        const customerMessages: Record<string, unknown>[] = [customerFlex];
-        if (isOrderPaid) {
-          customerMessages.push(
-            buildOrderStatusFlex({
-              status: "paid",
-              orderId,
-              amount: Number(order.totalAmount) || 0,
-              liffId
-            })
-          );
-        }
+        const customerFlex = buildReceiptFlexMessage({
+          orderId,
+          liffId,
+          orderData: {
+            ...order,
+            status: isOrderPaid ? "paid" : order.status,
+            paymentStatus: isOrderPaid ? "verified" : order.paymentStatus
+          }
+        });
 
-        await sendLineMessage({ token, targets: [customerLineId], messages: customerMessages });
+        // ส่ง flex บิลเดียวที่สมบูรณ์ ไม่แยกส่ง 2 ข้อความ
+        await sendLineMessage({ token, targets: [customerLineId], messages: [customerFlex] });
         customerNotified = true;
       }
     }

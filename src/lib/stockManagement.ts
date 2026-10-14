@@ -114,7 +114,11 @@ export async function restoreOrderStock(
   orderId?: string
 ): Promise<boolean> {
   const targetOrderId = String(orderId || order.orderId || order.id || "");
-  // Only restore if stock was marked as deducted or if stockRestored is not true
+  // Only restore if stock was marked as deducted and not already restored
+  if (order.stockDeducted !== true) {
+    console.log(`Stock was never deducted for order ${targetOrderId}, skipping restore`);
+    return true;
+  }
   if (order.stockRestored === true) {
     console.log(`Stock already restored for order ${targetOrderId}`);
     return true;

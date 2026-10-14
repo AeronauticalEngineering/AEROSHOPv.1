@@ -124,6 +124,7 @@ export default function AdminProductsPage() {
     const watchedVariants = watch("variants");
     const watchedOptions = watch("options");
     const watchedBundleItems = watch("bundleItems");
+    const watchedImageUrls = watch("imageUrls");
 
     const { fields: optionFields, append: appendOption, remove: removeOption, update: updateOption } = useFieldArray({
         control,
@@ -1237,8 +1238,11 @@ export default function AdminProductsPage() {
 
                                             {/* Image URLs */}
                                             <div>
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <label className="text-[11px] font-medium text-slate-600">ลิงก์รูปภาพ (URLs)</label>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <div>
+                                                        <label className="text-[11px] font-medium text-slate-700">รูปภาพสินค้า</label>
+                                                        <span className="text-[10px] text-slate-400 ml-1.5">(รูปแรกจะถูกใช้เป็นภาพปกหลัก)</span>
+                                                    </div>
                                                     <button
                                                         type="button"
                                                         onClick={() => appendImageUrl({ url: "" })}
@@ -1248,29 +1252,93 @@ export default function AdminProductsPage() {
                                                         เพิ่มลิงก์
                                                     </button>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    {imageUrlFields.length === 0 ? (
-                                                        <p className="text-[11px] text-slate-400 italic">ยังไม่มีลิงก์รูปภาพ</p>
-                                                    ) : (
-                                                        imageUrlFields.map((field, index) => (
-                                                            <div key={field.id} className="flex items-center gap-1.5">
-                                                                <input
-                                                                    {...register(`imageUrls.${index}.url`)}
-                                                                    placeholder="https://..."
-                                                                    className="flex-1 h-7.5 px-2.5 bg-slate-50/60 border border-slate-200 rounded-lg text-xs text-slate-900 font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeImageUrl(index)}
-                                                                    className="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                                                                >
-                                                                    <X size={13} />
-                                                                </button>
+
+                                                {imageUrlFields.length === 0 ? (
+                                                    <p className="text-[11px] text-slate-400 italic">ยังไม่มีรูปภาพสินค้า</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {/* Grid รูปภาพสินค้า (ไม่แสดงตัวหนังสือลิงก์) */}
+                                                        {imageUrlFields.some((_, i) => Boolean(watchedImageUrls?.[i]?.url?.trim())) && (
+                                                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                                                {imageUrlFields.map((field, index) => {
+                                                                    const currentUrl = watchedImageUrls?.[index]?.url?.trim() || "";
+                                                                    if (!currentUrl) return null;
+                                                                    return (
+                                                                        <div
+                                                                            key={field.id}
+                                                                            className="group relative aspect-square rounded-lg border border-slate-200 bg-slate-100 overflow-hidden shadow-2xs transition hover:border-slate-300"
+                                                                        >
+                                                                            <input
+                                                                                type="hidden"
+                                                                                value={currentUrl}
+                                                                                {...register(`imageUrls.${index}.url`)}
+                                                                            />
+                                                                            <a
+                                                                                href={currentUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="block w-full h-full"
+                                                                                title="คลิกเพื่อดูรูปภาพขนาดเต็ม"
+                                                                            >
+                                                                                <img
+                                                                                    src={currentUrl}
+                                                                                    alt={`ภาพที่ ${index + 1}`}
+                                                                                    className="w-full h-full object-cover transition group-hover:scale-105"
+                                                                                    onError={(e) => {
+                                                                                        (e.currentTarget as HTMLImageElement).src = "";
+                                                                                        (e.currentTarget as HTMLImageElement).alt = "ไม่พบรูปภาพ";
+                                                                                    }}
+                                                                                />
+                                                                            </a>
+
+                                                                            {index === 0 && (
+                                                                                <span className="absolute bottom-0 inset-x-0 bg-blue-600/90 text-white text-[9px] text-center font-medium py-0.5 leading-none">
+                                                                                    ภาพปก
+                                                                                </span>
+                                                                            )}
+
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => removeImageUrl(index)}
+                                                                                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-white/95 text-slate-600 shadow-xs hover:bg-rose-50 hover:text-rose-600 transition opacity-80 group-hover:opacity-100"
+                                                                                title="ลบรูปภาพนี้"
+                                                                            >
+                                                                                <X size={11} />
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                                <p className="text-[10px] text-slate-400 mt-1">ลิงก์แรกจะถูกใช้เป็นภาพปกหลัก</p>
+                                                        )}
+
+                                                        {/* ช่องกรอกกรณีผู้ใช้กด "เพิ่มลิงก์" ใหม่เอง */}
+                                                        {imageUrlFields.map((field, index) => {
+                                                            const currentUrl = watchedImageUrls?.[index]?.url?.trim() || "";
+                                                            if (currentUrl) return null;
+                                                            return (
+                                                                <div key={field.id} className="flex items-center gap-1.5 p-1 bg-slate-50 border border-dashed border-slate-300 rounded-lg">
+                                                                    <div className="w-7 h-7 rounded-md bg-slate-200 flex items-center justify-center shrink-0">
+                                                                        <ImageIcon size={13} className="text-slate-400" />
+                                                                    </div>
+                                                                    <input
+                                                                        {...register(`imageUrls.${index}.url`)}
+                                                                        placeholder="วางลิงก์รูปภาพ https://..."
+                                                                        autoFocus
+                                                                        className="flex-1 h-7 px-2 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white rounded transition"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => removeImageUrl(index)}
+                                                                        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 shrink-0"
+                                                                        title="ยกเลิก"
+                                                                    >
+                                                                        <X size={12} />
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* File Upload & Storage */}

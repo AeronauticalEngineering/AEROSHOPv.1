@@ -1,12 +1,13 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { collection, limit, onSnapshot, orderBy, query, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
+import { collection, limit, onSnapshot, orderBy, query, updateDoc, deleteDoc, doc, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { db, auth, storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Link from "next/link";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
-import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, Image as ImageIcon, Search, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, Image as ImageIcon, Search, Trash2, XCircle, Upload, Plus, Loader2 } from "lucide-react";
 
 type SlipCheck = {
   id: string;
@@ -86,6 +87,18 @@ export default function SlipChecksPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
+  const [useStorageForSlips, setUseStorageForSlips] = useState(true);
+  const [uploadingSlipId, setUploadingSlipId] = useState<string | null>(null);
+  const [isImageBroken, setIsImageBroken] = useState(false);
+
+  // สำหรับ Modal แนบสลิปให้ออเดอร์ใหม่
+  const [isNewSlipModalOpen, setIsNewSlipModalOpen] = useState(false);
+  const [newSlipOrderId, setNewSlipOrderId] = useState("");
+  const [newSlipAmount, setNewSlipAmount] = useState<number | "">("");
+  const [newSlipFile, setNewSlipFile] = useState<File | null>(null);
+  const [newSlipPreview, setNewSlipPreview] = useState<string | null>(null);
+  const [isCreatingSlip, setIsCreatingSlip] = useState(false);
+
   useEffect(() => {
     const q = query(
       collection(db, "payment_slips"),
@@ -106,11 +119,140 @@ export default function SlipChecksPage() {
         setIsSlipVerifyEnabled(false);
         return;
       }
-      const data = snap.data() as { enableSlipVerify?: boolean };
+      const data = snap.data() as { enableSlipVerify?: boolean; useStorageForPaymentSlips?: boolean };
       setIsSlipVerifyEnabled(Boolean(data.enableSlipVerify));
+      setUseStorageForSlips(data.useStorageForPaymentSlips !== false);
     });
     return () => unsub();
   }, []);
+
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+      reader.readAsDataURL(file);
+    });
+
+  const uploadSlipFile = async (file: File, slipId: string) => {
+    if (useStorageForSlips) {
+      const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const storagePath = `payment_slips/${slipId}-${Date.now()}.${extension}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file, { contentType: file.type || "image/jpeg" });
+      const imageUrl = await getDownloadURL(storageRef);
+      return { imageUrl, storagePath, storageProvider: "firebase_storage", base64: "" };
+    } else {
+      const base64 = await fileToBase64(file);
+      return { base64, storageProvider: "firestore_base64", imageUrl: "", storagePath: "" };
+    }
+  };
+
+  const handleReplaceSlipImage = async (slip: SlipCheck, file: File) => {
+    if (!file || !slip.id) return;
+    const maxBytes = 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      alert("ไฟล์รูปภาพมีขนาดใหญ่เกินไป (จำกัดไม่เกิน 10MB)");
+      return;
+    }
+
+    try {
+      setUploadingSlipId(slip.id);
+      const uploaded = await uploadSlipFile(file, slip.id);
+
+      const updatePayload: Record<string, unknown> = {
+        mimeType: file.type || "image/jpeg",
+        size: file.size,
+        updatedAt: serverTimestamp(),
+        ...uploaded
+      };
+
+      await updateDoc(doc(db, "payment_slips", slip.id), updatePayload);
+
+      if (imagePreviewTarget?.id === slip.id) {
+        setImagePreviewTarget((prev) =>
+          prev
+            ? {
+                ...prev,
+                imageUrl: uploaded.imageUrl,
+                base64: uploaded.base64,
+                storagePath: uploaded.storagePath
+              }
+            : null
+        );
+        setIsImageBroken(false);
+      }
+
+      alert("แนบรูปสลิปใหม่เรียบร้อยแล้ว");
+    } catch (error) {
+      console.error("Error replacing slip image:", error);
+      alert("เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ");
+    } finally {
+      setUploadingSlipId(null);
+    }
+  };
+
+  const handleCreateNewSlip = async () => {
+    const trimmedOrderId = newSlipOrderId.trim();
+    if (!trimmedOrderId) {
+      alert("กรุณาระบุรหัสออเดอร์ (Order ID)");
+      return;
+    }
+    if (!newSlipFile) {
+      alert("กรุณาเลือกไฟล์รูปภาพสลิป");
+      return;
+    }
+
+    try {
+      setIsCreatingSlip(true);
+      let orderAmount = typeof newSlipAmount === "number" ? newSlipAmount : 0;
+      let orderUserId: string | null = null;
+      let orderPaymentMethod: string | null = "promptpay";
+
+      try {
+        const orderSnap = await getDoc(doc(db, "orders", trimmedOrderId));
+        if (orderSnap.exists()) {
+          const oData = orderSnap.data();
+          if (!orderAmount && oData.totalAmount) orderAmount = Number(oData.totalAmount);
+          if (oData.userId) orderUserId = oData.userId;
+          if (oData.paymentMethod) orderPaymentMethod = oData.paymentMethod;
+        }
+      } catch (err) {
+        console.warn("Could not fetch order data:", err);
+      }
+
+      const slipRef = await addDoc(collection(db, "payment_slips"), {
+        orderId: trimmedOrderId,
+        userId: orderUserId,
+        amount: orderAmount,
+        paymentMethod: orderPaymentMethod,
+        needsVerify: false,
+        verifyStatus: "pending",
+        verifyMessage: "แนบสลิปโดยแอดมิน (รอตรวจสอบ)",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      const uploaded = await uploadSlipFile(newSlipFile, slipRef.id);
+      await updateDoc(slipRef, {
+        mimeType: newSlipFile.type || "image/jpeg",
+        size: newSlipFile.size,
+        ...uploaded
+      });
+
+      setIsNewSlipModalOpen(false);
+      setNewSlipOrderId("");
+      setNewSlipAmount("");
+      setNewSlipFile(null);
+      setNewSlipPreview(null);
+      alert(`แนบสลิปสำหรับออเดอร์ ${trimmedOrderId} สำเร็จแล้ว`);
+    } catch (error) {
+      console.error("Error creating slip:", error);
+      alert("เกิดข้อผิดพลาดในการแนบสลิป");
+    } finally {
+      setIsCreatingSlip(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     return slips.filter((s) => {
@@ -280,7 +422,15 @@ export default function SlipChecksPage() {
             {slips.length !== filtered.length ? ` (จากทั้งหมด ${slips.length})` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsNewSlipModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition shrink-0"
+          >
+            <Plus size={14} />
+            <span>แนบสลิปให้ออเดอร์</span>
+          </button>
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -411,12 +561,42 @@ export default function SlipChecksPage() {
                               </button>
                             )}
                             <button
-                              onClick={() => setImagePreviewTarget(slip)}
+                              onClick={() => {
+                                setIsImageBroken(false);
+                                setImagePreviewTarget(slip);
+                              }}
                               className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-gray-200 rounded-md hover:bg-gray-50"
+                              title="ดูรูปสลิป"
                             >
                               <ImageIcon size={12} />
                               รูป
                             </button>
+                            <label
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border rounded-md cursor-pointer transition ${
+                                uploadingSlipId === slip.id
+                                  ? "bg-gray-100 text-gray-400 border-gray-200 pointer-events-none"
+                                  : "bg-blue-50/80 border-blue-200 text-blue-700 hover:bg-blue-100"
+                              }`}
+                              title="แนบรูปสลิปใหม่ / แทนที่รูปเดิม"
+                            >
+                              {uploadingSlipId === slip.id ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Upload size={11} />
+                              )}
+                              <span>{uploadingSlipId === slip.id ? "กำลังส่ง..." : "แนบรูป"}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingSlipId === slip.id}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleReplaceSlipImage(slip, file);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
                             <button
                               onClick={() => openDeleteConfirm(slip)}
                               className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-gray-200 text-red-600 rounded-md hover:bg-white hover:border-red-200 hover:bg-red-50"
@@ -570,8 +750,11 @@ export default function SlipChecksPage() {
                 </p>
               </div>
               <button
-                onClick={() => setImagePreviewTarget(null)}
-                className="p-1 hover:bg-gray-100 rounded"
+                onClick={() => {
+                  setImagePreviewTarget(null);
+                  setIsImageBroken(false);
+                }}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition"
                 aria-label="ปิดรูปสลิป"
               >
                 <XCircle size={18} />
@@ -579,23 +762,192 @@ export default function SlipChecksPage() {
             </div>
             <div className="bg-[#F8F9FA] p-4">
               <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-gray-200 bg-white p-3">
-                {imagePreviewTarget.base64 || imagePreviewTarget.imageUrl ? (
+                {uploadingSlipId === imagePreviewTarget.id ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-blue-600 gap-2">
+                    <Loader2 size={32} className="animate-spin" />
+                    <p className="text-xs font-semibold">กำลังอัปโหลดรูปภาพใหม่...</p>
+                  </div>
+                ) : isImageBroken ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                      <AlertTriangle size={24} />
+                    </div>
+                    <p className="text-sm font-bold text-gray-900">รูปภาพสลิปไม่สมบูรณ์ หรือไฟล์เสียหาย</p>
+                    <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                      เกิดจากลูกค้าอัปโหลดไม่สำเร็จหรือเน็ตหลุด คุณสามารถกดปุ่ม "แนบรูปสลิปใหม่" ด้านล่างเพื่ออัปโหลดแทนที่ได้ทันที
+                    </p>
+                  </div>
+                ) : imagePreviewTarget.base64 || imagePreviewTarget.imageUrl ? (
                   <img
                     src={imagePreviewTarget.base64 || imagePreviewTarget.imageUrl}
                     alt={`สลิป ${imagePreviewTarget.orderId || ""}`}
-                    className="max-h-[72vh] max-w-full object-contain"
+                    className="max-h-[72vh] max-w-full object-contain rounded-lg"
+                    onError={() => setIsImageBroken(true)}
                   />
                 ) : (
-                  <div className="text-sm text-gray-400">ไม่มีรูปสลิป</div>
+                  <div className="flex flex-col items-center justify-center p-8 text-center text-gray-400">
+                    <ImageIcon size={32} className="mb-2 text-gray-300" />
+                    <p className="text-sm">ไม่มีรูปสลิปในระบบ</p>
+                  </div>
                 )}
               </div>
             </div>
-            <div className="p-4 border-t border-gray-100 bg-white flex justify-end">
+            <div className="p-4 border-t border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
+              <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer transition shadow-sm">
+                <Upload size={14} />
+                <span>แนบรูปสลิปใหม่ / แทนที่รูปเดิม</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingSlipId === imagePreviewTarget.id}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleReplaceSlipImage(imagePreviewTarget, file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+
+              <div className="flex items-center gap-2">
+                {isSlipVerifyEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => requestVerify(imagePreviewTarget)}
+                    disabled={(!imagePreviewTarget.base64 && !imagePreviewTarget.imageUrl) || verifyingId === imagePreviewTarget.id}
+                    className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition"
+                  >
+                    <CheckCircle size={14} />
+                    Auto ตรวจสอบ
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setImagePreviewTarget(null);
+                    setIsImageBroken(false);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition"
+                >
+                  ปิด
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isNewSlipModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-xl rounded-t-xl overflow-hidden shadow-2xl">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <Upload size={16} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">แนบสลิปให้ออเดอร์</h3>
+                  <p className="text-[11px] text-gray-500">สร้างรายการสลิปและอัปโหลดรูปภาพ</p>
+                </div>
+              </div>
               <button
-                onClick={() => setImagePreviewTarget(null)}
-                className="px-4 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition-colors"
+                onClick={() => setIsNewSlipModalOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition"
               >
-                ปิด
+                <XCircle size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-3.5 bg-[#F8F9FA]">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  รหัสออเดอร์ (Order ID) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น INV00233"
+                  value={newSlipOrderId}
+                  onChange={(e) => setNewSlipOrderId(e.target.value.toUpperCase())}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  ยอดเงินในสลิป (บาท) <span className="text-gray-400 font-normal">(ไม่บังคับ)</span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="เช่น 2500"
+                  value={newSlipAmount}
+                  onChange={(e) => setNewSlipAmount(e.target.value ? Number(e.target.value) : "")}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  ไฟล์รูปภาพสลิป <span className="text-rose-500">*</span>
+                </label>
+                <div className="border border-dashed border-gray-300 rounded-xl p-3 bg-white text-center">
+                  {newSlipPreview ? (
+                    <div className="space-y-2">
+                      <img src={newSlipPreview} alt="Preview" className="max-h-40 mx-auto object-contain rounded-lg border border-gray-200" />
+                      <p className="text-[11px] text-gray-500 truncate">{newSlipFile?.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewSlipFile(null);
+                          setNewSlipPreview(null);
+                        }}
+                        className="text-[11px] text-rose-600 hover:underline font-semibold"
+                      >
+                        เปลี่ยนรูป
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer block py-4">
+                      <Upload size={24} className="mx-auto text-gray-400 mb-1.5" />
+                      <p className="text-xs font-semibold text-gray-700">คลิกเพื่อเลือกรูปภาพสลิป</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">รองรับไฟล์ JPG, PNG, WEBP (ไม่เกิน 10MB)</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setNewSlipFile(file);
+                            setNewSlipPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-white flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsNewSlipModalOpen(false)}
+                className="flex-1 px-4 py-2 bg-white text-gray-700 text-xs font-semibold border border-gray-200 rounded-xl hover:bg-gray-50 transition"
+                disabled={isCreatingSlip}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateNewSlip}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                disabled={isCreatingSlip || !newSlipOrderId || !newSlipFile}
+              >
+                {isCreatingSlip ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>กำลังบันทึก...</span>
+                  </>
+                ) : (
+                  <span>บันทึกสลิป</span>
+                )}
               </button>
             </div>
           </div>

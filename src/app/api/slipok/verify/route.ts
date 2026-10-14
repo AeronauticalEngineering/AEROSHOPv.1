@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
 import { buildAdminPaymentFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
 
@@ -44,7 +44,8 @@ async function notifyPaymentVerified(
   settings: Record<string, unknown>,
   orderData: Record<string, unknown> | null,
   orderId: string,
-  amount: number
+  amount: number,
+  skipCustomerNotify?: boolean
 ) {
   try {
     const token = typeof settings?.lineChannelAccessToken === "string" ? settings.lineChannelAccessToken : "";
@@ -61,6 +62,8 @@ async function notifyPaymentVerified(
       });
       await sendLineMessage({ token, targets: adminTargets, message: adminFlex });
     }
+
+    if (skipCustomerNotify) return;
 
     if (!notifyEnabled(settings?.lineNotifyCustomerPaymentConfirmed)) return;
     let customerLineId = typeof orderData?.lineId === "string" ? orderData.lineId : null;
@@ -95,6 +98,7 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const slipId = body?.slipId as string | undefined;
+    const skipCustomerNotify = Boolean(body?.skipCustomerNotify);
     if (!slipId) {
       return NextResponse.json({ error: "Missing slipId" }, { status: 400 });
     }
@@ -202,7 +206,8 @@ export async function POST(req: Request) {
         settings,
         orderData,
         slip.orderId,
-        verifiedAmount ?? toNumber(slip.amount)
+        verifiedAmount ?? toNumber(slip.amount),
+        skipCustomerNotify
       );
     }
 

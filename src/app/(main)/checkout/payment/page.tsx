@@ -450,7 +450,7 @@ export default function CheckoutPaymentPage() {
         const res = await fetch("/api/slipok/verify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slipId: slipDoc.id })
+            body: JSON.stringify({ slipId: slipDoc.id, skipCustomerNotify: true })
         });
         const data = await res.json().catch(() => ({}));
         const status = data?.verifyStatus || data?.status || (res.ok ? "pending" : "error");
@@ -694,31 +694,26 @@ export default function CheckoutPaymentPage() {
                 }
             }
 
-            // 1. Send receipt bill into customer chat first via LIFF if available (1. บิลออเดอร์ก่อน -> 2. บิลใบเสร็จตาม)
+            // 1. Send single receipt bill into customer chat via LIFF if available
             let sentViaLiff = false;
             if (liff && typeof liff.isInClient === "function" && liff.isInClient()) {
                 try {
+                    const isOrderPaid = Boolean(slipVerifyResult?.verified);
                     const orderReceipt = buildReceiptFlexMessage({
                         orderId,
                         liffId: liffId || "",
                         orderData: {
                             ...baseOrderData,
                             orderNo: orderId,
-                            id: orderId
+                            id: orderId,
+                            status: isOrderPaid ? "paid" : baseOrderData.status,
+                            paymentStatus: isOrderPaid ? "verified" : baseOrderData.paymentStatus
                         }
                     });
-                    const messages: Array<Record<string, unknown>> = [orderReceipt as unknown as Record<string, unknown>];
-                    if (slipVerifyResult?.verified) {
-                        messages.push(
-                            buildOrderStatusFlex({
-                                status: "paid",
-                                orderId,
-                                amount: baseOrderData.totalAmount,
-                                liffId: liffId || ""
-                            }) as Record<string, unknown>
-                        );
-                    }
-                    await (liff.sendMessages as unknown as (msgs: Array<Record<string, unknown>>) => Promise<void>)(messages);
+                    // ส่งเป็น 1 Flex บิลเดียวที่สมบูรณ์ ไม่แยกส่ง 2 ข้อความ
+                    await (liff.sendMessages as unknown as (msgs: Array<Record<string, unknown>>) => Promise<void>)([
+                        orderReceipt as unknown as Record<string, unknown>
+                    ]);
                     sentViaLiff = true;
                 } catch (sendError) {
                     console.error("Error sending checkout receipt message:", sendError);

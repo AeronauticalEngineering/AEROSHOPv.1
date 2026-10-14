@@ -363,11 +363,15 @@ export function buildReceiptFlexMessage({
 
     return {
         type: "flex",
-        altText: `ได้รับคำสั่งซื้อแล้ว ${shortOrderId(orderId, 8)}`,
+        altText: paymentPending
+            ? `ได้รับคำสั่งซื้อแล้ว ${shortOrderId(orderId, 8)}`
+            : `ชำระเงินเรียบร้อยแล้ว ${shortOrderId(orderId, 8)}`,
         contents: buildBubble({
-            label: paymentPending ? "รอชำระเงิน" : "รับออเดอร์แล้ว",
-            title: "ได้รับคำสั่งซื้อแล้ว",
-            description: `${shortOrderId(orderId, 12)} ขอบคุณสำหรับคำสั่งซื้อของคุณ`,
+            label: paymentPending ? "รอชำระเงิน" : "ชำระเงินแล้ว",
+            title: paymentPending ? "ได้รับคำสั่งซื้อแล้ว" : "ชำระเงินเรียบร้อยแล้ว",
+            description: paymentPending
+                ? `${shortOrderId(orderId, 12)} ขอบคุณสำหรับคำสั่งซื้อของคุณ`
+                : `${shortOrderId(orderId, 12)} ขอบคุณสำหรับการสั่งซื้อและชำระเงิน`,
             tone: paymentPending ? "warning" : "success",
             body: [
                 {
@@ -381,6 +385,7 @@ export function buildReceiptFlexMessage({
                         infoRow("ลูกค้า", String(data?.customerName || "-"), true),
                         infoRow("เบอร์โทร", String(data?.customerPhone || "-")),
                         infoRow("จัดส่ง", String(data?.shippingOptionName || "จัดส่งสินค้า")),
+                        infoRow("สถานะ", paymentPending ? "รอชำระเงิน" : "ชำระเงินแล้ว", true),
                         {
                             type: "box",
                             layout: "vertical",
