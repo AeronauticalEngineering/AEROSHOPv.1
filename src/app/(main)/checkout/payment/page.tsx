@@ -7,13 +7,13 @@ import { useAuth } from "@/context/AuthContext";
 import { useCoupons } from "@/hooks/useCoupons";
 import useLiff from "@/hooks/useLiff";
 
-import { CreditCard, Check, Copy, QrCode, Smartphone, Truck, Globe, XCircle, UploadCloud } from "lucide-react";
+import { CreditCard, Check, Copy, QrCode, Smartphone, Truck, Globe, XCircle, UploadCloud, Loader2, Trash2 } from "lucide-react";
 import { addDoc, collection, serverTimestamp, doc, setDoc, getDoc, updateDoc, arrayUnion, increment, query, where, orderBy, getDocs, runTransaction } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
-import { buildOrderStatusFlex } from "@/lib/lineNotify";
 import { ShippingOption, StoreSettings } from "@/types/store";
+import { compressSlipImage } from "@/lib/imageCompression";
 
 interface Promotion {
     id: string;
@@ -82,13 +82,14 @@ export default function CheckoutPaymentPage() {
     const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
     const [selectedShippingOptionId, setSelectedShippingOptionId] = useState("");
     const [copiedPromptPay, setCopiedPromptPay] = useState(false);
+    const [copiedBankAccount, setCopiedBankAccount] = useState(false);
     const [slipFile, setSlipFile] = useState<File | null>(null);
+    const [slipBase64, setSlipBase64] = useState<string | null>(null);
     const [slipPreview, setSlipPreview] = useState<string | null>(null);
     const [slipError, setSlipError] = useState("");
+    const [isCompressingSlip, setIsCompressingSlip] = useState(false);
     const [slipVerifyMessage, setSlipVerifyMessage] = useState("");
     const [slipVerifyStatus, setSlipVerifyStatus] = useState<"idle" | "checking" | "verified" | "failed">("idle");
-    const [verifiedSlipId, setVerifiedSlipId] = useState<string | null>(null);
-    const [uploadedSlipId, setUploadedSlipId] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
     const orderCreatedRef = useRef(false);
 
@@ -340,7 +341,7 @@ export default function CheckoutPaymentPage() {
     const selectedPaymentMethod = availablePaymentMethods.includes(paymentMethod as PaymentMethod)
         ? (paymentMethod as PaymentMethod)
         : "";
-    const canSubmitOrder = !isSubmitting && slipVerifyStatus !== "checking";
+    const canSubmitOrder = !isSubmitting && !isCompressingSlip && slipVerifyStatus !== "checking";
 
     useEffect(() => {
         if (paymentMethod && !availablePaymentMethods.includes(paymentMethod)) {
@@ -362,6 +363,12 @@ export default function CheckoutPaymentPage() {
         setCopiedPromptPay(true);
         setTimeout(() => setCopiedPromptPay(false), 1800);
     };
+    const handleCopyBankAccount = () => {
+        if (!storeSettings?.bankAccountNumber) return;
+        navigator.clipboard.writeText(storeSettings.bankAccountNumber.replace(/-/g, "").trim());
+        setCopiedBankAccount(true);
+        setTimeout(() => setCopiedBankAccount(false), 1800);
+    };
     const fileToBase64 = (file: File) =>
         new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -380,24 +387,52 @@ export default function CheckoutPaymentPage() {
     const handleSlipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
         setSlipError("");
-        setVerifiedSlipId(null);
-        setUploadedSlipId(null);
-        const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
-        const maxBytes = useStorageForSlips ? 5 * 1024 * 1024 : 700 * 1024;
-        if (file.size > maxBytes) {
-            setSlipFile(null);
-            setSlipPreview(null);
-            setSlipError(`ไฟล์ใหญ่เกินไป (จำกัด ${useStorageForSlips ? "5MB" : "700KB"}) โปรดบีบอัดรูป`);
-            setSlipVerifyStatus("failed");
-            setSlipVerifyMessage("ไฟล์ใหญ่เกินไป กรุณาแนบสลิปใหม่");
-            return;
-        }
-        // เก็บไฟล์ไว้ในเครื่องก่อน จะสร้าง slip doc + verify หลังสร้างออเดอร์
-        setSlipFile(file);
-        setSlipPreview(URL.createObjectURL(file));
-        setSlipVerifyStatus("idle");
         setSlipVerifyMessage("");
+        setSlipVerifyStatus("idle");
+        setIsCompressingSlip(true);
+
+        try {
+            // Automatically compress & resize image to ensure fast upload and Firestore 1MB safety
+            const compressed = await compressSlipImage(file, {
+                maxWidth: 1400,
+                maxHeight: 1800,
+                quality: 0.82,
+                maxSizeKB: 500
+            });
+            setSlipFile(compressed.file);
+            setSlipBase64(compressed.base64);
+            setSlipPreview(compressed.previewUrl);
+            setSlipVerifyStatus("idle");
+            setSlipVerifyMessage("");
+        } catch (err: unknown) {
+            console.error("Error processing slip image:", err);
+            // Fallback for smaller files if canvas compression fails
+            if (file.size <= 1.5 * 1024 * 1024) {
+                setSlipFile(file);
+                const localUrl = URL.createObjectURL(file);
+                setSlipPreview(localUrl);
+                setSlipVerifyStatus("idle");
+            } else {
+                setSlipFile(null);
+                setSlipPreview(null);
+                setSlipBase64(null);
+                setSlipError(err instanceof Error ? err.message : "ไม่สามารถเปิดไฟล์รูปภาพได้ กรุณาเลือกรูปภาพใหม่");
+                setSlipVerifyStatus("failed");
+                setSlipVerifyMessage("ไม่สามารถประมวลผลรูปภาพได้ กรุณาแนบสลิปใหม่");
+            }
+        } finally {
+            setIsCompressingSlip(false);
+        }
+    };
+    const handleRemoveSlip = () => {
+        setSlipFile(null);
+        setSlipBase64(null);
+        setSlipPreview(null);
+        setSlipError("");
+        setSlipVerifyMessage("");
+        setSlipVerifyStatus("idle");
     };
     const promptPayQrUrl = getPromptPayQrUrl();
     const uploadSelectedSlip = async (orderId: string | null, fileOverride?: File): Promise<SlipVerifyResult | null> => {
@@ -409,7 +444,7 @@ export default function CheckoutPaymentPage() {
             userId: userProfile?.uid || userProfile?.id || null,
             paymentMethod: selectedPaymentMethod || null,
             amount: grandTotal,
-            mimeType: file.type,
+            mimeType: file.type || "image/jpeg",
             size: file.size,
             needsVerify: false,
             verifyStatus: "pending",
@@ -418,16 +453,24 @@ export default function CheckoutPaymentPage() {
         };
         const slipDoc = await addDoc(collection(db, "payment_slips"), baseSlipData);
 
+        let uploadedViaStorage = false;
         if (useStorageForSlips) {
-            const { imageUrl, storagePath } = await uploadSlipToStorage(file, slipDoc.id);
-            await updateDoc(doc(db, "payment_slips", slipDoc.id), {
-                imageUrl,
-                storagePath,
-                storageProvider: "firebase_storage",
-                updatedAt: serverTimestamp()
-            });
-        } else {
-            const base64 = await fileToBase64(file);
+            try {
+                const { imageUrl, storagePath } = await uploadSlipToStorage(file, slipDoc.id);
+                await updateDoc(doc(db, "payment_slips", slipDoc.id), {
+                    imageUrl,
+                    storagePath,
+                    storageProvider: "firebase_storage",
+                    updatedAt: serverTimestamp()
+                });
+                uploadedViaStorage = true;
+            } catch (storageErr) {
+                console.warn("⚠️ Firebase Storage upload failed, falling back to Firestore base64:", storageErr);
+            }
+        }
+
+        if (!uploadedViaStorage) {
+            const base64 = slipBase64 || await fileToBase64(file);
             await updateDoc(doc(db, "payment_slips", slipDoc.id), {
                 base64,
                 storageProvider: "firestore_base64",
@@ -447,21 +490,126 @@ export default function CheckoutPaymentPage() {
         setSlipVerifyStatus("checking");
         setSlipVerifyMessage("กำลังตรวจสอบสลิปอัตโนมัติ...");
 
-        const res = await fetch("/api/slipok/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slipId: slipDoc.id, skipCustomerNotify: true })
-        });
-        const data = await res.json().catch(() => ({}));
-        const status = data?.verifyStatus || data?.status || (res.ok ? "pending" : "error");
-        const message = data?.verifyMessage || data?.message || data?.error || "ตรวจสอบสลิปไม่สำเร็จ";
-        const verified = res.ok && status === "verified";
+        try {
+            const res = await fetch("/api/slipok/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ slipId: slipDoc.id, skipCustomerNotify: true })
+            });
+            const data = await res.json().catch(() => ({}));
+            const status = data?.verifyStatus || data?.status || (res.ok ? "pending" : "error");
+            const message = data?.verifyMessage || data?.message || data?.error || "ตรวจสอบสลิปไม่สำเร็จ";
+            const verified = res.ok && status === "verified";
 
-        setSlipVerifyStatus(verified ? "verified" : "failed");
-        setSlipVerifyMessage(verified ? "ชำระเงินสำเร็จ ตรวจสอบสลิปผ่านแล้ว" : message);
+            setSlipVerifyStatus(verified ? "verified" : "failed");
+            setSlipVerifyMessage(verified ? "ชำระเงินสำเร็จ ตรวจสอบสลิปผ่านแล้ว" : message);
 
-        return { verified, status, message, slipId: slipDoc.id };
+            return { verified, status, message, slipId: slipDoc.id };
+        } catch (verifyErr) {
+            console.error("Slip verification error:", verifyErr);
+            setSlipVerifyStatus("failed");
+            setSlipVerifyMessage("แนบสลิปเรียบร้อย รอเจ้าหน้าที่ตรวจสอบ");
+            return {
+                verified: false,
+                status: "pending",
+                message: "แนบสลิปเรียบร้อย รอเจ้าหน้าที่ตรวจสอบ",
+                slipId: slipDoc.id
+            };
+        }
     };
+
+    const renderSlipUploadSection = () => (
+        <div className="border-t border-slate-200 p-4">
+            <div className="flex items-center gap-3">
+                {slipPreview ? (
+                    <button
+                        type="button"
+                        onClick={() => setPreviewImage({ src: slipPreview, alt: "สลิปการชำระเงิน" })}
+                        className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                        aria-label="ขยายรูปสลิป"
+                    >
+                        <img
+                            src={slipPreview}
+                            alt="สลิปการชำระเงิน"
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        <span className="absolute inset-x-0 bottom-0 bg-slate-950/70 py-0.5 text-center text-[9px] font-medium text-white">
+                            ดูรูป
+                        </span>
+                    </button>
+                ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
+                        {isCompressingSlip ? (
+                            <Loader2 size={18} className="animate-spin text-slate-500" />
+                        ) : (
+                            <UploadCloud size={18} />
+                        )}
+                    </div>
+                )}
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-900">
+                        {isCompressingSlip
+                            ? "กำลังประมวลผลรูปภาพ..."
+                            : slipFile?.name || "ยังไม่ได้แนบสลิป"}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">
+                        {slipFile
+                            ? "แนบรูปสลิปเรียบร้อยแล้ว (บีบอัดอัตโนมัติ)"
+                            : "รองรับ JPG, PNG, ถ่ายรูป (บีบอัดอัตโนมัติ)"}
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                    {slipFile && !isCompressingSlip && (
+                        <button
+                            type="button"
+                            onClick={handleRemoveSlip}
+                            className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
+                            title="ลบสลิป"
+                        >
+                            <Trash2 size={13} />
+                        </button>
+                    )}
+
+                    <div className="relative inline-flex shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-bold text-white shadow-sm shadow-gray-900/20 transition hover:bg-gray-800 active:scale-[0.98]">
+                        {isCompressingSlip ? (
+                            <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                            <UploadCloud size={13} />
+                        )}
+                        <span>{isCompressingSlip ? "กำลังประมวลผล..." : slipFile ? "เปลี่ยน" : "แนบ"}</span>
+                        <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/jpg,image/heic,image/*"
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            title="เลือกรูปสลิป"
+                            disabled={isCompressingSlip || isSubmitting}
+                            onClick={(e) => {
+                                (e.target as HTMLInputElement).value = "";
+                            }}
+                            onChange={handleSlipChange}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {slipVerifyMessage && (
+                <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-semibold ${slipVerifyStatus === "verified"
+                    ? "bg-green-50 text-green-700"
+                    : slipVerifyStatus === "failed"
+                        ? "bg-red-50 text-red-700"
+                        : slipVerifyStatus === "checking"
+                            ? "bg-blue-50 text-blue-700"
+                            : "bg-orange-50 text-orange-700"
+                    }`}>
+                    {slipVerifyMessage}
+                </p>
+            )}
+            {slipError && !slipVerifyMessage && (
+                <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-700">{slipError}</p>
+            )}
+        </div>
+    );
 
     useEffect(() => {
         if (typeof window === "undefined" || !storeSettings) return;
@@ -873,81 +1021,93 @@ export default function CheckoutPaymentPage() {
                                                 </div>
                                         </div>
                                     </div>
-                                    <div className="border-t border-slate-200 p-4">
-                                        <div className="flex items-center gap-3">
-                                            {slipPreview ? (
-                                                <img
-                                                    src={slipPreview}
-                                                    alt="สลิปการชำระเงิน"
-                                                    className="h-14 w-14 shrink-0 rounded-lg border border-slate-200 object-cover"
-                                                />
-                                            ) : (
-                                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
-                                                    <UploadCloud size={18} />
-                                                </div>
-                                            )}
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-xs font-semibold text-slate-900">{slipFile?.name || "ยังไม่ได้แนบสลิป"}</p>
-                                                <p className="mt-0.5 text-[10px] text-slate-400">
-                                                    {storeSettings.enableSlipVerify
-                                                        ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์"
-                                                        : `รูปภาพไม่เกิน ${storeSettings.useStorageForPaymentSlips ? "5MB" : "700KB"}`}
-                                                </p>
-                                            </div>
-                                            <label className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-bold text-white shadow-sm shadow-gray-900/20 transition hover:bg-gray-800 active:scale-[0.98]">
-                                                <UploadCloud size={14} />
-                                                {slipFile ? "เปลี่ยน" : "แนบ"}
-                                                <input type="file" accept="image/*" className="hidden" onChange={handleSlipChange} />
-                                            </label>
-                                        </div>
-                                        {slipVerifyMessage && (
-                                            <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-semibold ${slipVerifyStatus === "verified"
-                                                ? "bg-green-50 text-green-700"
-                                                : slipVerifyStatus === "failed"
-                                                    ? "bg-red-50 text-red-700"
-                                                    : slipVerifyStatus === "checking"
-                                                        ? "bg-blue-50 text-blue-700"
-                                                        : "bg-orange-50 text-orange-700"
-                                                }`}>
-                                                {slipVerifyMessage}
-                                            </p>
-                                        )}
-                                        {slipError && !slipVerifyMessage && (
-                                            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-700">{slipError}</p>
-                                        )}
-                                    </div>
+                                    {renderSlipUploadSection()}
                                 </div>
                             )}
                         </div>
                     )}
 
                     {storeSettings.enableBankTransfer && (
-                        <button
-                            type="button"
-                            onClick={() => setPaymentMethod('bank_transfer')}
-                            className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'bank_transfer'
-                                ? 'border-gray-900 bg-white'
-                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                                }`}
-                        >
-                            <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${paymentMethod === 'bank_transfer' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                <CreditCard size={22} />
-                            </div>
-                            <div className="text-left flex-1">
-                                <span className="block font-semibold text-gray-900 text-sm">โอนเงินผ่านบัญชีธนาคาร</span>
-                                <span className="text-xs text-gray-400">
-                                    {storeSettings.bankAccountName
-                                        ? `ผู้รับโอน: ${storeSettings.bankAccountName}`
-                                        : "แนบสลิปการโอนเงิน"}
-                                </span>
-                            </div>
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => setPaymentMethod('bank_transfer')}
+                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${paymentMethod === 'bank_transfer'
+                                    ? 'border-gray-900 bg-white'
+                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                    }`}
+                            >
+                                <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${paymentMethod === 'bank_transfer' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400'
+                                    }`}>
+                                    <CreditCard size={22} />
+                                </div>
+                                <div className="text-left flex-1">
+                                    <span className="block font-semibold text-gray-900 text-sm">โอนเงินผ่านบัญชีธนาคาร</span>
+                                    <span className="text-xs text-gray-400">
+                                        {storeSettings.bankAccountName
+                                            ? `ผู้รับโอน: ${storeSettings.bankAccountName}`
+                                            : "แนบสลิปการโอนเงิน"}
+                                    </span>
+                                </div>
+                                {paymentMethod === 'bank_transfer' && (
+                                    <div className="w-6 h-6 rounded-full bg-gray-900 flex items-center justify-center">
+                                        <Check size={14} className="text-white" />
+                                    </div>
+                                )}
+                            </button>
+
                             {paymentMethod === 'bank_transfer' && (
-                                <div className="w-6 h-6 rounded-full bg-gray-900 flex items-center justify-center">
-                                    <Check size={14} className="text-white" />
+                                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                                        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                                            <CreditCard size={16} />
+                                            ข้อมูลบัญชีสำหรับโอนเงิน
+                                        </h3>
+                                        <span className="text-sm font-extrabold text-slate-950">฿{grandTotal.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className="p-3 sm:p-4 space-y-2.5">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-500">ธนาคาร</span>
+                                                <span className="font-bold text-slate-900">{storeSettings.bankName || "-"}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-500">ชื่อบัญชี</span>
+                                                <span className="font-semibold text-slate-900">{storeSettings.bankAccountName || "-"}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] uppercase tracking-wider text-slate-500">เลขที่บัญชี</p>
+                                                    <p className="font-mono text-sm font-extrabold text-slate-900">{storeSettings.bankAccountNumber || "-"}</p>
+                                                </div>
+                                                {storeSettings.bankAccountNumber && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCopyBankAccount}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                                                    >
+                                                        {copiedBankAccount ? (
+                                                            <>
+                                                                <Check size={12} className="text-emerald-500" />
+                                                                <span className="text-emerald-600 font-bold">คัดลอกแล้ว</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Copy size={12} className="text-slate-500" />
+                                                                <span>คัดลอกเลขบัญชี</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {renderSlipUploadSection()}
                                 </div>
                             )}
-                        </button>
+                        </div>
                     )}
 
                     {storeSettings.enableCOD && (
@@ -1046,7 +1206,7 @@ export default function CheckoutPaymentPage() {
                             alt={previewImage.alt}
                             className="mx-auto max-h-[76vh] w-full object-contain"
                         />
-                        <p className="mt-3 text-center text-xs font-semibold text-slate-500">PromptPay QR</p>
+                        <p className="mt-3 text-center text-xs font-semibold text-slate-500">{previewImage.alt}</p>
                     </div>
                 </div>
             )}

@@ -16,6 +16,7 @@ import useLiffAuth from "@/hooks/useLiffAuth";
 import { buildIssueReportFlexMessage, buildSlipResultFlexMessage } from "@/lib/line/flex";
 import { ProductBundleItem, SelectedProductAddOn } from "@/types/product";
 import { formatOrderId } from "@/lib/orderId";
+import { compressSlipImage } from "@/lib/imageCompression";
 
 interface OrderItem {
     productId: string;
@@ -605,19 +606,35 @@ export default function OrderDetailPage() {
         const file = e.target.files?.[0];
         if (!file) return;
         setSlipError("");
+        setSlipStatus({ status: 'checking', message: 'กำลังประมวลผลรูปภาพ...' });
 
-        const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
-        const maxBytes = useStorageForSlips ? 5 * 1024 * 1024 : 700 * 1024;
-        if (file.size > maxBytes) {
-            setSlipError(`ไฟล์ใหญ่เกินไป (จำกัด ${useStorageForSlips ? "5MB" : "700KB"}) โปรดบีบอัดรูป`);
-            return;
-        }
+        try {
+            const compressed = await compressSlipImage(file, {
+                maxWidth: 1400,
+                maxHeight: 1800,
+                quality: 0.82,
+                maxSizeKB: 500
+            });
+            setSlipFile(compressed.file);
+            setSlipPreview(compressed.previewUrl);
+            setSlipStatus({ status: 'pending', message: 'พร้อมอัปโหลดสลิป' });
 
-        setSlipFile(file);
-        setSlipPreview(URL.createObjectURL(file));
-
-        if (storeSettings?.enableSlipVerify) {
-            await handleSlipUpload(file);
+            if (storeSettings?.enableSlipVerify) {
+                await handleSlipUpload(compressed.file);
+            }
+        } catch (err: unknown) {
+            console.error("Error processing slip image:", err);
+            if (file.size <= 1.5 * 1024 * 1024) {
+                setSlipFile(file);
+                setSlipPreview(URL.createObjectURL(file));
+                setSlipStatus({ status: 'pending', message: 'พร้อมอัปโหลดสลิป' });
+                if (storeSettings?.enableSlipVerify) {
+                    await handleSlipUpload(file);
+                }
+            } else {
+                setSlipError(err instanceof Error ? err.message : "ไม่สามารถเปิดไฟล์รูปภาพได้");
+                setSlipStatus({ status: 'failed', message: 'ไม่สามารถประมวลผลรูปภาพได้ กรุณาแนบใหม่' });
+            }
         }
     };
 
@@ -633,7 +650,7 @@ export default function OrderDetailPage() {
             const useStorageForSlips = Boolean(storeSettings?.useStorageForPaymentSlips);
 
             const slipData: Record<string, unknown> = {
-                mimeType: fileToUpload.type,
+                mimeType: fileToUpload.type || "image/jpeg",
                 size: fileToUpload.size,
                 paymentMethod: order.paymentMethod || null,
                 amount: order.totalAmount || 0,
@@ -643,22 +660,28 @@ export default function OrderDetailPage() {
                 updatedAt: serverTimestamp()
             };
 
-            setSlipStatus({ status: 'pending', message: 'กำลังตรวจสอบ...' });
-
             setSlipStatus({
                 status: storeSettings?.enableSlipVerify ? 'checking' : 'pending',
                 message: storeSettings?.enableSlipVerify ? 'กำลังตรวจสอบสลิปอัตโนมัติ...' : 'รอการตรวจสอบโดยเจ้าหน้าที่'
             });
 
+            let uploadedViaStorage = false;
+
             if (slipDocId) {
                 if (useStorageForSlips) {
-                    const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, slipDocId);
-                    slipData.imageUrl = imageUrl;
-                    slipData.storagePath = storagePath;
-                    slipData.storageProvider = "firebase_storage";
-                    slipData.base64 = "";
-                    setSlipPreview(imageUrl);
-                } else {
+                    try {
+                        const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, slipDocId);
+                        slipData.imageUrl = imageUrl;
+                        slipData.storagePath = storagePath;
+                        slipData.storageProvider = "firebase_storage";
+                        slipData.base64 = "";
+                        setSlipPreview(imageUrl);
+                        uploadedViaStorage = true;
+                    } catch (storageErr) {
+                        console.warn("⚠️ Storage upload failed, falling back to Firestore base64:", storageErr);
+                    }
+                }
+                if (!uploadedViaStorage) {
                     slipData.base64 = await fileToBase64(fileToUpload);
                     slipData.imageUrl = "";
                     slipData.storageProvider = "firestore_base64";
@@ -679,15 +702,21 @@ export default function OrderDetailPage() {
                     createdAt: serverTimestamp()
                 });
                 if (useStorageForSlips) {
-                    const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, newDoc.id);
-                    await updateDoc(doc(db, "payment_slips", newDoc.id), {
-                        imageUrl,
-                        storagePath,
-                        storageProvider: "firebase_storage",
-                        updatedAt: serverTimestamp()
-                    });
-                    setSlipPreview(imageUrl);
-                } else {
+                    try {
+                        const { imageUrl, storagePath } = await uploadSlipToStorage(fileToUpload, newDoc.id);
+                        await updateDoc(doc(db, "payment_slips", newDoc.id), {
+                            imageUrl,
+                            storagePath,
+                            storageProvider: "firebase_storage",
+                            updatedAt: serverTimestamp()
+                        });
+                        setSlipPreview(imageUrl);
+                        uploadedViaStorage = true;
+                    } catch (storageErr) {
+                        console.warn("⚠️ Storage upload failed, falling back to Firestore base64:", storageErr);
+                    }
+                }
+                if (!uploadedViaStorage) {
                     const base64 = await fileToBase64(fileToUpload);
                     await updateDoc(doc(db, "payment_slips", newDoc.id), {
                         base64,
@@ -708,7 +737,7 @@ export default function OrderDetailPage() {
 
         } catch (error) {
             console.error("Error uploading slip:", error);
-            setSlipError("อัปโหลดสลิปไม่สำเร็จ");
+            setSlipError("อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
         } finally {
             setSlipUploading(false);
         }
@@ -1327,15 +1356,6 @@ export default function OrderDetailPage() {
                             )}
 
                             <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-                                {/* Always render hidden input */}
-                                <input
-                                    type="file"
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={handleSlipChange}
-                                    id="slip-upload-input"
-                                />
-
                                 {slipPreview ? (
                                     <div className="flex items-center gap-3">
                                         <button
@@ -1354,31 +1374,42 @@ export default function OrderDetailPage() {
                                             <p className="text-[10px] text-slate-400">{slipDocId ? "มีสลิปในระบบแล้ว" : "พร้อมอัปโหลด"} · กดรูปเพื่อขยาย</p>
                                         </div>
                                         {(!slipDocId || slipStatus.status !== 'verified') && (
-                                            <button
-                                                type="button"
-                                                onClick={() => document.getElementById('slip-upload-input')?.click()}
-                                                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--shop-primary)] px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:brightness-95"
-                                            >
+                                            <div className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-lg bg-[var(--shop-primary)] px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:brightness-95">
                                                 <UploadCloud size={13} />
-                                                เปลี่ยน
-                                            </button>
+                                                <span>เปลี่ยน</span>
+                                                <input
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp,image/jpg,image/heic,image/*"
+                                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                                    onClick={(e) => {
+                                                        (e.target as HTMLInputElement).value = "";
+                                                    }}
+                                                    onChange={handleSlipChange}
+                                                    disabled={slipUploading}
+                                                />
+                                            </div>
                                         )}
                                     </div>
                                 ) : (
-                                    <label htmlFor="slip-upload-input" className="flex w-full cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--shop-primary)] px-3 py-2 text-center text-xs font-extrabold text-white shadow-sm transition hover:brightness-95 active:scale-[0.99]">
+                                    <div className="relative flex w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg bg-[var(--shop-primary)] px-3 py-2.5 text-center text-xs font-extrabold text-white shadow-sm transition hover:brightness-95 active:scale-[0.99]">
                                         <span className="inline-flex items-center gap-1.5">
                                             <UploadCloud size={15} />
                                             แนบสลิป
                                         </span>
                                         <span className="mt-0.5 block text-[10px] font-medium text-white/80">
-                                            รูปภาพไม่เกิน {storeSettings?.useStorageForPaymentSlips ? "5MB" : "700KB"}
+                                            รองรับภาพถ่ายและสลิปธนาคาร (ระบบบีบอัดอัตโนมัติ)
                                         </span>
-                                        <span className="block text-[10px] font-medium text-white/80">
-                                            {storeSettings?.enableSlipVerify
-                                                ? "ตรวจสอบอัตโนมัติหลังเลือกไฟล์"
-                                                : `รูปภาพไม่เกิน ${storeSettings?.useStorageForPaymentSlips ? "5MB" : "700KB"}`}
-                                        </span>
-                                    </label>
+                                        <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp,image/jpg,image/heic,image/*"
+                                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                            onClick={(e) => {
+                                                (e.target as HTMLInputElement).value = "";
+                                            }}
+                                            onChange={handleSlipChange}
+                                            disabled={slipUploading}
+                                        />
+                                    </div>
                                 )}
 
                                 <div className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${slipStatus.status === 'verified' ? 'border-green-200 bg-green-50 text-green-700' :
