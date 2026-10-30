@@ -135,6 +135,17 @@ export default function ShopHome() {
     }, [selectedCategory]);
 
     useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" })
+            .then((res) => res.json().catch(() => null))
+            .then((data) => {
+                if (data?.releasedCount > 0) {
+                    fetchProducts(false, selectedCategory);
+                }
+            })
+            .catch(() => undefined);
+    }, [fetchProducts, selectedCategory]);
+
+    useEffect(() => {
         fetchProducts(false, selectedCategory);
     }, [fetchProducts, selectedCategory]);
 
@@ -337,7 +348,7 @@ export default function ShopHome() {
                                     <div className="sm:block">
                                         <p className="text-[10px] text-gray-500 leading-none">สวัสดี</p>
                                         <p className="text-sm font-semibold text-gray-900 leading-tight">{userName}</p>
-  
+
                                     </div>
                                 </>
                             )}
@@ -373,7 +384,7 @@ export default function ShopHome() {
                             </Link>
                         </div>
                     </div>
-               
+
 
                     <div className="mt-4 space-y-4">
                         <div className="relative z-10">
@@ -434,229 +445,229 @@ export default function ShopHome() {
                             </div>
                         )}
 
-                          {promotions.some(p => p.type === 'auto') && (
-                    <div className="bg-gray-900 text-white py-2.5 px-4 shadow-sm overflow-hidden relative border-b border-gray-800 rounded-sm">
-                        <div className="flex items-center gap-2 animate-marquee whitespace-nowrap">
-                            {promotions.filter(p => p.type === 'auto').map((promo, i) => (
-                                <span key={promo.id} className="flex items-center gap-2 mx-4 text-sm font-medium">
-                                    <Megaphone size={14} className="text-yellow-400 animate-pulse" />
-                                    {promo.name}
-                                    <span className="bg-white/10 px-2 py-0.5 rounded text-xs text-yellow-300 border border-white/10">
-                                        {promo.discountType === 'percentage' ? `ลด ${promo.discountValue}%` : `ลด ฿${promo.discountValue}`}
-                                    </span>
-                                    <span className="text-gray-400 text-xs font-light">
-                                        {promo.minPurchase > 0 ? `(ขั้นต่ำ ฿${promo.minPurchase.toLocaleString()})` : '(ไม่มีขั้นต่ำ)'}
-                                    </span>
-                                    {i !== promotions.filter(p => p.type === 'auto').length - 1 && <span className="opacity-30 text-gray-600">|</span>}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                        {promotions.some(p => p.type === 'auto') && (
+                            <div className="bg-gray-900 text-white py-2.5 px-4 shadow-sm overflow-hidden relative border-b border-gray-800 rounded-sm">
+                                <div className="flex items-center gap-2 animate-marquee whitespace-nowrap">
+                                    {promotions.filter(p => p.type === 'auto').map((promo, i) => (
+                                        <span key={promo.id} className="flex items-center gap-2 mx-4 text-sm font-medium">
+                                            <Megaphone size={14} className="text-yellow-400 animate-pulse" />
+                                            {promo.name}
+                                            <span className="bg-white/10 px-2 py-0.5 rounded text-xs text-yellow-300 border border-white/10">
+                                                {promo.discountType === 'percentage' ? `ลด ${promo.discountValue}%` : `ลด ฿${promo.discountValue}`}
+                                            </span>
+                                            <span className="text-gray-400 text-xs font-light">
+                                                {promo.minPurchase > 0 ? `(ขั้นต่ำ ฿${promo.minPurchase.toLocaleString()})` : '(ไม่มีขั้นต่ำ)'}
+                                            </span>
+                                            {i !== promotions.filter(p => p.type === 'auto').length - 1 && <span className="opacity-30 text-gray-600">|</span>}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-                {/* Coupon Promotions (Click to Collect & Disappear) */}
-                {promotions.some(p => p.type === 'coupon') && (
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2 px-1">
-                            <Ticket size={16} className="text-orange-500" />
-                            <h2 className="font-bold text-gray-900 text-sm">คูปองส่วนลด</h2>
-                        </div>
-                        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-                            {promotions
-                                .filter(p => p.type === 'coupon')
-                                .map((promo) => {
-                                    const myCoupon = myCoupons.find(c => c.id === promo.id);
-                                    const isCollected = Boolean(myCoupon);
-                                    return (
-                                        <div
-                                            key={promo.id}
-                                            className="flex-shrink-0 w-56 h-16 bg-white rounded-lg border border-orange-100 shadow-sm flex overflow-hidden relative group"
-                                        >
-                                        {/* Left Side: Discount */}
-                                        <div className="w-16 bg-gradient-to-br from-orange-500 to-red-500 flex flex-col items-center justify-center p-1.5 gap-0.5 text-white shrink-0 relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_0%,rgba(255,255,255,0.2)_0%,transparent_50%)]"></div>
-                                            <Ticket size={12} className="opacity-90 relative z-10" />
-                                            <div className="text-center relative z-10">
-                                                <span className="text-base font-bold block leading-none shadow-black/10 drop-shadow-md">
-                                                    {promo.discountType === 'percentage'
-                                                        ? `${promo.discountValue}%`
-                                                        : `฿${promo.discountValue}`
-                                                    }
-                                                </span>
-                                                <span className="text-[8px] opacity-90 font-medium">คูปอง</span>
-                                            </div>
-                                        </div>
+                        {/* Coupon Promotions (Click to Collect & Disappear) */}
+                        {promotions.some(p => p.type === 'coupon') && (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 px-1">
+                                    <Ticket size={16} className="text-orange-500" />
+                                    <h2 className="font-bold text-gray-900 text-sm">คูปองส่วนลด</h2>
+                                </div>
+                                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+                                    {promotions
+                                        .filter(p => p.type === 'coupon')
+                                        .map((promo) => {
+                                            const myCoupon = myCoupons.find(c => c.id === promo.id);
+                                            const isCollected = Boolean(myCoupon);
+                                            return (
+                                                <div
+                                                    key={promo.id}
+                                                    className="flex-shrink-0 w-56 h-16 bg-white rounded-lg border border-orange-100 shadow-sm flex overflow-hidden relative group"
+                                                >
+                                                    {/* Left Side: Discount */}
+                                                    <div className="w-16 bg-gradient-to-br from-orange-500 to-red-500 flex flex-col items-center justify-center p-1.5 gap-0.5 text-white shrink-0 relative overflow-hidden">
+                                                        <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_0%,rgba(255,255,255,0.2)_0%,transparent_50%)]"></div>
+                                                        <Ticket size={12} className="opacity-90 relative z-10" />
+                                                        <div className="text-center relative z-10">
+                                                            <span className="text-base font-bold block leading-none shadow-black/10 drop-shadow-md">
+                                                                {promo.discountType === 'percentage'
+                                                                    ? `${promo.discountValue}%`
+                                                                    : `฿${promo.discountValue}`
+                                                                }
+                                                            </span>
+                                                            <span className="text-[8px] opacity-90 font-medium">คูปอง</span>
+                                                        </div>
+                                                    </div>
 
-                                        {/* Right Side: Details */}
-                                        <div className="flex-1 p-2 flex flex-col justify-between min-w-0 relative bg-[radial-gradient(#f5f5f5_1px,transparent_1px)] [background-size:8px_8px]">
-                                            <div className="min-w-0">
-                                                <h3 className="font-bold text-gray-900 text-[11px] truncate leading-tight">{promo.name}</h3>
-                                                <p className="text-[9px] text-gray-500 mt-0.5 truncate">
-                                                    ขั้นต่ำ ฿{promo.minPurchase.toLocaleString()}
-                                                </p>
-                                                <p className="text-[9px] text-gray-400">
-                                                    หมดเขต {format(toDate(promo.endDate), 'd MMM yy', { locale: th })}
-                                                </p>
-                                            </div>
+                                                    {/* Right Side: Details */}
+                                                    <div className="flex-1 p-2 flex flex-col justify-between min-w-0 relative bg-[radial-gradient(#f5f5f5_1px,transparent_1px)] [background-size:8px_8px]">
+                                                        <div className="min-w-0">
+                                                            <h3 className="font-bold text-gray-900 text-[11px] truncate leading-tight">{promo.name}</h3>
+                                                            <p className="text-[9px] text-gray-500 mt-0.5 truncate">
+                                                                ขั้นต่ำ ฿{promo.minPurchase.toLocaleString()}
+                                                            </p>
+                                                            <p className="text-[9px] text-gray-400">
+                                                                หมดเขต {format(toDate(promo.endDate), 'd MMM yy', { locale: th })}
+                                                            </p>
+                                                        </div>
 
-                                            <button
-                                                onClick={() => handleCollectCoupon(promo)}
-                                                disabled={isCollected}
-                                                className={`absolute bottom-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold shadow-lg transition-all active:scale-95 
+                                                        <button
+                                                            onClick={() => handleCollectCoupon(promo)}
+                                                            disabled={isCollected}
+                                                            className={`absolute bottom-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold shadow-lg transition-all active:scale-95 
                                                 ${isCollected
-                                                        ? 'bg-gray-200 text-gray-500 shadow-none cursor-default'
-                                                        : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-200'
-                                                    }`}
-                                            >
-                                                {isCollected ? 'รับแล้ว' : 'เก็บโค้ด'}
-                                                <Check size={10} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    );
-                                })}
-                        </div>
-                    </div>
-                )}
+                                                                    ? 'bg-gray-200 text-gray-500 shadow-none cursor-default'
+                                                                    : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-200'
+                                                                }`}
+                                                        >
+                                                            {isCollected ? 'รับแล้ว' : 'เก็บโค้ด'}
+                                                            <Check size={10} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    
+
                 </div>
-                
+
             </header>
 
             <main className="flex-1 overflow-y-auto pb-8">
                 <div className="px-4 py-4 space-y-5">
-                {/* Auto Promotions Ticker */}
-              
-                {/* Products Grid */}
-                {loading ? (
-                    <div className="grid grid-cols-2 gap-3">
-                        {[...Array(4)].map((_, i) => (
-                            <div key={i} className="bg-white rounded-xl aspect-[3/4] animate-pulse"></div>
-                        ))}
-                    </div>
-                ) : filteredProducts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                        <Package size={48} className="mb-4 opacity-30" />
-                        <p className="text-gray-600 font-medium">ไม่พบสินค้า</p>
-                        <p className="text-sm text-gray-400 mt-1">ลองค้นหาด้วยคำอื่น</p>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-6">
+                    {/* Auto Promotions Ticker */}
+
+                    {/* Products Grid */}
+                    {loading ? (
                         <div className="grid grid-cols-2 gap-3">
-                            {filteredProducts.map(product => {
-                                // Calculate best discount
-                                const bestPromo = promotions
-                                    .filter(p => p.type === 'auto' && product.price >= p.minPurchase)
-                                    .sort((a, b) => {
-                                        const discountA = a.discountType === 'percentage'
-                                            ? (product.price * a.discountValue / 100)
-                                            : a.discountValue;
-                                        const discountB = b.discountType === 'percentage'
-                                            ? (product.price * b.discountValue / 100)
-                                            : b.discountValue;
-                                        return discountB - discountA;
-                                    })[0];
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="bg-white rounded-xl aspect-[3/4] animate-pulse"></div>
+                            ))}
+                        </div>
+                    ) : filteredProducts.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                            <Package size={48} className="mb-4 opacity-30" />
+                            <p className="text-gray-600 font-medium">ไม่พบสินค้า</p>
+                            <p className="text-sm text-gray-400 mt-1">ลองค้นหาด้วยคำอื่น</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-6">
+                            <div className="grid grid-cols-2 gap-3">
+                                {filteredProducts.map(product => {
+                                    // Calculate best discount
+                                    const bestPromo = promotions
+                                        .filter(p => p.type === 'auto' && product.price >= p.minPurchase)
+                                        .sort((a, b) => {
+                                            const discountA = a.discountType === 'percentage'
+                                                ? (product.price * a.discountValue / 100)
+                                                : a.discountValue;
+                                            const discountB = b.discountType === 'percentage'
+                                                ? (product.price * b.discountValue / 100)
+                                                : b.discountValue;
+                                            return discountB - discountA;
+                                        })[0];
 
-                                const finalPrice = bestPromo
-                                    ? (bestPromo.discountType === 'percentage'
-                                        ? product.price * (1 - bestPromo.discountValue / 100)
-                                        : Math.max(0, product.price - bestPromo.discountValue))
-                                    : product.price;
+                                    const finalPrice = bestPromo
+                                        ? (bestPromo.discountType === 'percentage'
+                                            ? product.price * (1 - bestPromo.discountValue / 100)
+                                            : Math.max(0, product.price - bestPromo.discountValue))
+                                        : product.price;
 
-                                const hasDiscount = bestPromo && finalPrice < product.price;
-                                const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]);
-                                const displayStock = getProductDisplayStock(product, bundleProducts);
+                                    const hasDiscount = bestPromo && finalPrice < product.price;
+                                    const primaryImage = getPrimaryProductImage(product, productBase64Images[product.id]);
+                                    const displayStock = getProductDisplayStock(product, bundleProducts);
 
-                                return (
-                                    <Link href={`/product/${product.id}`} key={product.id} className="block group">
-                                        <div className="bg-white rounded-xl overflow-hidden border border-gray-200 transition-all hover:shadow hover:border-gray-100 relative">
-                                            {/* Image */}
-                                            <div className="aspect-square bg-white flex items-center justify-center p-4 relative overflow-hidden">
-                                                {primaryImage ? (
-                                                    <img
-                                                        src={primaryImage}
-                                                        alt={product.name}
-                                                        className="w-full h-full object-contain transition-transform group-hover:scale-105 rounded-lg"
-                                                    />
-                                                ) : (
-                                                    <Package size={32} className="text-gray-200" />
-                                                )}
+                                    return (
+                                        <Link href={`/product/${product.id}`} key={product.id} className="block group">
+                                            <div className="bg-white rounded-xl overflow-hidden border border-gray-200 transition-all hover:shadow hover:border-gray-100 relative">
+                                                {/* Image */}
+                                                <div className="aspect-square bg-white flex items-center justify-center p-4 relative overflow-hidden">
+                                                    {primaryImage ? (
+                                                        <img
+                                                            src={primaryImage}
+                                                            alt={product.name}
+                                                            className="w-full h-full object-contain transition-transform group-hover:scale-105 rounded-lg"
+                                                        />
+                                                    ) : (
+                                                        <Package size={32} className="text-gray-200" />
+                                                    )}
 
-                                                {/* Badges Container */}
-                                                <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-                                                    {/* Stock Badge */}
-                                                    {displayStock === 0 && (
-                                                        <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                                                            หมด
+                                                    {/* Badges Container */}
+                                                    <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                                                        {/* Stock Badge */}
+                                                        {displayStock === 0 && (
+                                                            <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                                                หมด
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Sale Tag */}
+                                                    {hasDiscount && (
+                                                        <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm leading-none">
+                                                            ลด {bestPromo.discountType === 'percentage'
+                                                                ? `${bestPromo.discountValue}%`
+                                                                : `฿${bestPromo.discountValue}`
+                                                            }
                                                         </div>
                                                     )}
                                                 </div>
+                                                {/* Info */}
+                                                <div className="p-3">
+                                                    <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{product.name}</h3>
 
-                                                {/* Sale Tag */}
-                                                {hasDiscount && (
-                                                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm leading-none">
-                                                        ลด {bestPromo.discountType === 'percentage'
-                                                            ? `${bestPromo.discountValue}%`
-                                                            : `฿${bestPromo.discountValue}`
-                                                        }
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {/* Info */}
-                                            <div className="p-3">
-                                                <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{product.name}</h3>
-
-                                                <div className="flex items-end justify-between mt-2">
-                                                    <div className="flex flex-row items-baseline gap-1">
-                                                        {hasDiscount ? (
-                                                            <>
-                                                                <span className="text-xs text-gray-400 line-through leading-none">฿{product.price.toLocaleString()}</span>
-                                                                <span className="font-bold text-red-600 text-base leading-none">฿{finalPrice.toLocaleString()}</span>
-                                                            </>
-                                                        ) : (
-                                                            <span className="font-bold text-gray-900 text-base leading-none">฿{product.price.toLocaleString()}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-col items-end justify-end gap-1">
-                                                        {product.hasVariants && product.variants && product.variants.length > 0 && (
-                                                            <span className="text-[10px] text-gray-400 leading-none">{product.variants.length} แบบ</span>
-                                                        )}
-                                                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide leading-none">{product.category}</span>
+                                                    <div className="flex items-end justify-between mt-2">
+                                                        <div className="flex flex-row items-baseline gap-1">
+                                                            {hasDiscount ? (
+                                                                <>
+                                                                    <span className="text-xs text-gray-400 line-through leading-none">฿{product.price.toLocaleString()}</span>
+                                                                    <span className="font-bold text-red-600 text-base leading-none">฿{finalPrice.toLocaleString()}</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="font-bold text-gray-900 text-base leading-none">฿{product.price.toLocaleString()}</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col items-end justify-end gap-1">
+                                                            {product.hasVariants && product.variants && product.variants.length > 0 && (
+                                                                <span className="text-[10px] text-gray-400 leading-none">{product.variants.length} แบบ</span>
+                                                            )}
+                                                            <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide leading-none">{product.category}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </Link>
-                                );
-                            })}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Auto Load More Trigger */}
+                            {hasMore && !searchTerm && (
+                                <div
+                                    ref={loadMoreTriggerRef}
+                                    className="flex min-h-12 items-center justify-center gap-2 py-3 text-sm font-medium text-gray-500"
+                                >
+                                    {isFetchingMore ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                                            กำลังโหลด...
+                                        </>
+                                    ) : (
+                                        'โหลดเพิ่มเติม'
+                                    )}
+                                </div>
+                            )}
+
+                            {!hasMore && products.length > 0 && !searchTerm && (
+                                <div className="text-center text-xs text-gray-400 py-4">
+                                    - แสดงสินค้าครบแล้ว -
+                                </div>
+                            )}
                         </div>
-
-                        {/* Auto Load More Trigger */}
-                        {hasMore && !searchTerm && (
-                            <div
-                                ref={loadMoreTriggerRef}
-                                className="flex min-h-12 items-center justify-center gap-2 py-3 text-sm font-medium text-gray-500"
-                            >
-                                {isFetchingMore ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-                                        กำลังโหลด...
-                                    </>
-                                ) : (
-                                    'โหลดเพิ่มเติม'
-                                )}
-                            </div>
-                        )}
-
-                        {!hasMore && products.length > 0 && !searchTerm && (
-                            <div className="text-center text-xs text-gray-400 py-4">
-                                - แสดงสินค้าครบแล้ว -
-                            </div>
-                        )}
-                    </div>
-                )}
+                    )}
                 </div>
             </main>
 

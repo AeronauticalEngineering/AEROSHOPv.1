@@ -3,10 +3,12 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronLeft, MapPin, Megaphone, Phone, ReceiptText, ShoppingBag, User } from "lucide-react";
-import { collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { useCart } from "@/context/CartContext";
 import { db } from "@/lib/firebase";
 import { ShippingOption, StoreSettings } from "@/types/store";
+import { Product } from "@/types/product";
+import { validateItemsStockAgainstLive } from "@/lib/productStock";
 import CheckoutOrderSummaryPage from "@/components/CheckoutOrderSummaryPage";
 
 interface Promotion {
@@ -87,6 +89,41 @@ function CheckoutPreOrderSummary() {
     const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
     const [isSubmitting] = useState(false);
     const [selectedShippingOptionId, setSelectedShippingOptionId] = useState("");
+    const [liveProducts, setLiveProducts] = useState<Record<string, Product>>({});
+
+    const cartProductIdsKey = useMemo(() => {
+        const ids = new Set<string>();
+        cartItems.forEach((item) => {
+            if (item.id) ids.add(item.id);
+            item.bundleItems?.forEach((b) => {
+                if (b.productId) ids.add(b.productId);
+            });
+        });
+        return Array.from(ids).sort().join(",");
+    }, [cartItems]);
+
+    useEffect(() => {
+        if (!cartProductIdsKey) return;
+        const ids = cartProductIdsKey.split(",").filter(Boolean);
+        const unsubs = ids.map((pid) =>
+            onSnapshot(doc(db, "products", pid), (snap) => {
+                if (snap.exists()) {
+                    setLiveProducts((prev) => ({
+                        ...prev,
+                        [snap.id]: { id: snap.id, ...snap.data() } as Product
+                    }));
+                }
+            })
+        );
+        return () => {
+            unsubs.forEach((u) => u());
+        };
+    }, [cartProductIdsKey]);
+
+    const stockValidation = useMemo(
+        () => validateItemsStockAgainstLive(cartItems, liveProducts),
+        [cartItems, liveProducts]
+    );
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -443,6 +480,11 @@ function CheckoutPreOrderSummary() {
             </main>
 
             <div className="fixed bottom-0 z-30 w-full max-w-md border-t border-gray-100 bg-white px-4 py-3 pb-6">
+                {!stockValidation.isAvailable && (
+                    <div className="mb-2.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                        ขออภัย สินค้าหมดแล้วหรือไม่เพียงพอ ({stockValidation.outOfStockNames.join(", ")}) ไม่สามารถสั่งซื้อได้
+                    </div>
+                )}
                 <div className="grid grid-cols-[0.85fr_1.15fr] gap-2">
                     <button
                         type="button"
@@ -455,10 +497,11 @@ function CheckoutPreOrderSummary() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => router.push("/checkout/payment")}
-                        className="rounded-full bg-orange-500 py-3.5 text-sm font-bold text-white shadow-sm shadow-orange-500/20 transition hover:bg-orange-600 active:scale-[0.98]"
+                        onClick={() => stockValidation.isAvailable && router.push("/checkout/payment")}
+                        disabled={!stockValidation.isAvailable}
+                        className="rounded-full bg-orange-500 py-3.5 text-sm font-bold text-white shadow-sm shadow-orange-500/20 transition hover:bg-orange-600 active:scale-[0.98] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none disabled:cursor-not-allowed"
                     >
-                        ยืนยันและชำระเงิน
+                        {stockValidation.isAvailable ? "ยืนยันและชำระเงิน" : "สินค้าหมดแล้ว"}
                     </button>
                 </div>
             </div>

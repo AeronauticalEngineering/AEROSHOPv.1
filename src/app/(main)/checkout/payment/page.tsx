@@ -8,11 +8,13 @@ import { useCoupons } from "@/hooks/useCoupons";
 import useLiff from "@/hooks/useLiff";
 
 import { CreditCard, Check, Copy, QrCode, Smartphone, Truck, Globe, XCircle, UploadCloud, Loader2, Trash2 } from "lucide-react";
-import { addDoc, collection, serverTimestamp, doc, setDoc, getDoc, updateDoc, arrayUnion, increment, query, where, orderBy, getDocs, runTransaction } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, setDoc, getDoc, updateDoc, arrayUnion, increment, query, where, orderBy, getDocs, runTransaction, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { buildReceiptFlexMessage } from "@/lib/line/flex";
 import { ShippingOption, StoreSettings } from "@/types/store";
+import { Product } from "@/types/product";
+import { validateItemsStockAgainstLive } from "@/lib/productStock";
 import { compressSlipImage } from "@/lib/imageCompression";
 
 interface Promotion {
@@ -91,7 +93,46 @@ export default function CheckoutPaymentPage() {
     const [slipVerifyMessage, setSlipVerifyMessage] = useState("");
     const [slipVerifyStatus, setSlipVerifyStatus] = useState<"idle" | "checking" | "verified" | "failed">("idle");
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+    const [liveProducts, setLiveProducts] = useState<Record<string, Product>>({});
     const orderCreatedRef = useRef(false);
+
+    useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+    }, []);
+
+    const cartProductIdsKey = useMemo(() => {
+        const ids = new Set<string>();
+        cartItems.forEach((item) => {
+            if (item.id) ids.add(item.id);
+            item.bundleItems?.forEach((b) => {
+                if (b.productId) ids.add(b.productId);
+            });
+        });
+        return Array.from(ids).sort().join(",");
+    }, [cartItems]);
+
+    useEffect(() => {
+        if (!cartProductIdsKey) return;
+        const ids = cartProductIdsKey.split(",").filter(Boolean);
+        const unsubs = ids.map((pid) =>
+            onSnapshot(doc(db, "products", pid), (snap) => {
+                if (snap.exists()) {
+                    setLiveProducts((prev) => ({
+                        ...prev,
+                        [snap.id]: { id: snap.id, ...snap.data() } as Product
+                    }));
+                }
+            })
+        );
+        return () => {
+            unsubs.forEach((u) => u());
+        };
+    }, [cartProductIdsKey]);
+
+    const stockValidation = useMemo(
+        () => validateItemsStockAgainstLive(cartItems, liveProducts),
+        [cartItems, liveProducts]
+    );
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -341,7 +382,7 @@ export default function CheckoutPaymentPage() {
     const selectedPaymentMethod = availablePaymentMethods.includes(paymentMethod as PaymentMethod)
         ? (paymentMethod as PaymentMethod)
         : "";
-    const canSubmitOrder = !isSubmitting && !isCompressingSlip && slipVerifyStatus !== "checking";
+    const canSubmitOrder = !isSubmitting && !isCompressingSlip && slipVerifyStatus !== "checking" && stockValidation.isAvailable;
 
     useEffect(() => {
         if (paymentMethod && !availablePaymentMethods.includes(paymentMethod)) {
@@ -777,6 +818,70 @@ export default function CheckoutPaymentPage() {
                 updatedAt: serverTimestamp()
             };
             const orderId = await runTransaction(db, async (transaction) => {
+                // ตรวจสอบสต็อกคงเหลือล่าสุดใน Transaction ก่อนสร้างออเดอร์ (ถ้าครบโควต้า 60 ชิ้นแล้วจะกดสั่งซื้อไม่ได้)
+                const requiredMap = new Map<string, { productId: string; variantId?: string; quantity: number; displayName: string }>();
+                for (const item of discountedItems) {
+                    const itemQty = Math.max(1, Number(item.quantity) || 1);
+                    if (item.bundleItems && item.bundleItems.length > 0) {
+                        for (const bItem of item.bundleItems) {
+                            if (!bItem.productId) continue;
+                            if (bItem.variantId && bItem.variantId.startsWith("custom-")) continue;
+                            const key = `${bItem.productId}::${bItem.variantId || ""}`;
+                            const existing = requiredMap.get(key) || {
+                                productId: bItem.productId,
+                                variantId: bItem.variantId || undefined,
+                                quantity: 0,
+                                displayName: bItem.productName || item.name
+                            };
+                            existing.quantity += itemQty * Math.max(1, Number(bItem.quantity) || 1);
+                            requiredMap.set(key, existing);
+                        }
+                    } else {
+                        if (!item.id) continue;
+                        const variantId = item.selectedVariant?.id;
+                        if (variantId && variantId.startsWith("custom-")) continue;
+                        const key = `${item.id}::${variantId || ""}`;
+                        const existing = requiredMap.get(key) || {
+                            productId: item.id,
+                            variantId,
+                            quantity: 0,
+                            displayName: item.name
+                        };
+                        existing.quantity += itemQty;
+                        requiredMap.set(key, existing);
+                    }
+                }
+
+                const uniqueProductIds = Array.from(new Set(Array.from(requiredMap.values()).map((r) => r.productId)));
+                const productSnapMap = new Map<string, Record<string, unknown>>();
+                for (const pid of uniqueProductIds) {
+                    const pSnap = await transaction.get(doc(db, "products", pid));
+                    if (!pSnap.exists()) {
+                        throw new Error(`OUT_OF_STOCK:${pid}`);
+                    }
+                    productSnapMap.set(pid, pSnap.data() as Record<string, unknown>);
+                }
+
+                for (const req of requiredMap.values()) {
+                    const pData = productSnapMap.get(req.productId);
+                    if (!pData || pData.isActive === false) {
+                        throw new Error(`OUT_OF_STOCK:${req.displayName}`);
+                    }
+                    if (req.variantId) {
+                        const variants = (pData.variants || []) as Array<Record<string, unknown>>;
+                        const matched = variants.find((v) => v.id === req.variantId);
+                        const vStock = Math.max(0, Number(matched?.stock || 0));
+                        if (!matched || vStock < req.quantity) {
+                            throw new Error(`OUT_OF_STOCK:${req.displayName}`);
+                        }
+                    } else {
+                        const currentStock = Math.max(0, Number(pData.stock || 0));
+                        if (currentStock < req.quantity) {
+                            throw new Error(`OUT_OF_STOCK:${req.displayName}`);
+                        }
+                    }
+                }
+
                 const counterRef = doc(db, "counters", "orders");
                 const counterSnap = await transaction.get(counterRef);
                 const currentNumber = counterSnap.exists() ? Number(counterSnap.data().lastNumber || 0) : 0;
@@ -897,7 +1002,12 @@ export default function CheckoutPaymentPage() {
             router.replace(`/myorder/${orderId}`);
         } catch (error) {
             console.error("Error creating order: ", error);
-            alert("เกิดข้อผิดพลาดในการสั่งซื้อ กรุณาลองใหม่อีกครั้ง");
+            if (error instanceof Error && error.message.startsWith("OUT_OF_STOCK:")) {
+                const itemName = error.message.replace("OUT_OF_STOCK:", "");
+                alert(`ขออภัย สินค้า "${itemName}" หมดโควต้าแล้ว (มีผู้ชำระเงินครบจำนวนแล้ว) ไม่สามารถสั่งซื้อได้`);
+            } else {
+                alert("เกิดข้อผิดพลาดในการสั่งซื้อ กรุณาลองใหม่อีกครั้ง");
+            }
             setIsSubmitting(false);
         }
     };
@@ -933,8 +1043,14 @@ export default function CheckoutPaymentPage() {
             </header>
 
             <main className="flex-1 p-4 space-y-4 overflow-y-auto pb-28">
+                {!stockValidation.isAvailable && (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
+                        ขออภัย สินค้าในตะกร้าหมดโควต้าแล้ว ({stockValidation.outOfStockNames.join(", ")}) เนื่องจากมีผู้ชำระเงินครบจำนวนที่กำหนดแล้ว จึงไม่สามารถชำระเงินหรือยืนยันคำสั่งซื้อได้
+                    </div>
+                )}
+
                 {/* Payment Method */}
-                <div className="space-y-3">
+                <div className={`space-y-3 ${!stockValidation.isAvailable ? "pointer-events-none opacity-40" : ""}`}>
                     <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide px-1">วิธีชำระเงิน</h2>
 
                     {storeSettings.enablePromptPay && (
@@ -1221,6 +1337,8 @@ export default function CheckoutPaymentPage() {
                 >
                     {isSubmitting ? (
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : !stockValidation.isAvailable ? (
+                        "สินค้าหมดแล้ว ไม่สามารถสั่งซื้อได้"
                     ) : slipVerifyStatus === "checking" ? (
                         "กำลังตรวจสอบสลิป..."
                     ) : (

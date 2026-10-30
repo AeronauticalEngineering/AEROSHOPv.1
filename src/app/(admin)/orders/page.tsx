@@ -198,7 +198,7 @@ export default function AdminOrdersPage() {
         if (sortBy !== field) {
             return <ArrowUpDown size={12} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0" />;
         }
-        return sortOrder === 'asc' 
+        return sortOrder === 'asc'
             ? <ArrowUp size={12} className="text-gray-900 ml-1 flex-shrink-0" />
             : <ArrowDown size={12} className="text-gray-900 ml-1 flex-shrink-0" />;
     };
@@ -228,6 +228,8 @@ export default function AdminOrdersPage() {
     };
 
     useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+
         const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const items = snapshot.docs.map(doc => ({
@@ -648,17 +650,23 @@ export default function AdminOrdersPage() {
     const handleDeleteOrder = async (order: Order) => {
         try {
             setDeletingOrderId(order.id);
-            await deleteDoc(doc(db, "orders", order.id));
 
-            // Update Customer Stats
-            if (order.customerId) {
-                const customerRef = doc(db, "customers", order.customerId);
-                await updateDoc(customerRef, {
-                    totalOrders: increment(-1),
-                    totalSpent: increment(-order.totalAmount)
-                });
+            // คืนสต็อกอัตโนมัติก่อนลบออเดอร์ หากออเดอร์นั้นเคยถูกตัดสต็อกและยังไม่ได้ยกเลิก
+            if (order.status !== "cancelled" && order.status !== "returned") {
+                const idToken = await auth?.currentUser?.getIdToken();
+                const authHeaders: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+                await fetch("/api/orders/update-status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...authHeaders },
+                    body: JSON.stringify({
+                        orderId: order.id,
+                        status: "cancelled",
+                        cancelReason: "ลบคำสั่งซื้อโดยผู้ดูแล"
+                    })
+                }).catch(() => undefined);
             }
 
+            await deleteDoc(doc(db, "orders", order.id));
             setSelectedOrder(null);
         } catch (error) {
             console.error("Error deleting order:", error);
@@ -779,11 +787,10 @@ export default function AdminOrdersPage() {
                 <button
                     type="button"
                     onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        filterStatus === 'all'
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${filterStatus === 'all'
                             ? 'bg-white border-slate-900 ring-1 ring-slate-900 shadow-2xs'
                             : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-2xs'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
                         <span>ออเดอร์ทั้งหมด</span>
@@ -798,11 +805,10 @@ export default function AdminOrdersPage() {
                 <button
                     type="button"
                     onClick={() => { setFilterStatus('pending'); setCurrentPage(1); }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        filterStatus === 'pending'
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${filterStatus === 'pending'
                             ? 'bg-amber-50/50 border-amber-600 ring-1 ring-amber-600 shadow-2xs'
                             : 'bg-white border-slate-200/80 hover:border-amber-200 shadow-2xs'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between text-[11px] text-amber-700 font-semibold mb-1">
                         <span>รอชำระเงิน</span>
@@ -817,11 +823,10 @@ export default function AdminOrdersPage() {
                 <button
                     type="button"
                     onClick={() => { setFilterStatus('paid'); setCurrentPage(1); }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        filterStatus === 'paid'
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${filterStatus === 'paid'
                             ? 'bg-blue-50/50 border-blue-600 ring-1 ring-blue-600 shadow-2xs'
                             : 'bg-white border-slate-200/80 hover:border-blue-200 shadow-2xs'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between text-[11px] text-blue-700 font-semibold mb-1">
                         <span>ชำระเงินแล้ว</span>
@@ -836,11 +841,10 @@ export default function AdminOrdersPage() {
                 <button
                     type="button"
                     onClick={() => { setFilterStatus('shipped'); setCurrentPage(1); }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        filterStatus === 'shipped'
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${filterStatus === 'shipped'
                             ? 'bg-purple-50/50 border-purple-600 ring-1 ring-purple-600 shadow-2xs'
                             : 'bg-white border-slate-200/80 hover:border-purple-200 shadow-2xs'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between text-[11px] text-purple-700 font-semibold mb-1">
                         <span>จัดส่งแล้ว</span>
@@ -855,11 +859,10 @@ export default function AdminOrdersPage() {
                 <button
                     type="button"
                     onClick={() => { setFilterStatus('completed'); setCurrentPage(1); }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer col-span-2 sm:col-span-1 ${
-                        filterStatus === 'completed'
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer col-span-2 sm:col-span-1 ${filterStatus === 'completed'
                             ? 'bg-emerald-50/50 border-emerald-600 ring-1 ring-emerald-600 shadow-2xs'
                             : 'bg-white border-slate-200/80 hover:border-emerald-200 shadow-2xs'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between text-[11px] text-emerald-700 font-semibold mb-1">
                         <span>สำเร็จแล้ว</span>
@@ -906,11 +909,10 @@ export default function AdminOrdersPage() {
                     <button
                         type="button"
                         onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                            filterStatus === 'all'
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${filterStatus === 'all'
                                 ? 'bg-slate-900 text-white shadow-2xs'
                                 : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/70'
-                        }`}
+                            }`}
                     >
                         <span>ทั้งหมด</span>
                         <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${filterStatus === 'all' ? 'bg-white/20 text-white' : 'bg-white text-slate-600'}`}>
@@ -926,11 +928,10 @@ export default function AdminOrdersPage() {
                                 key={status}
                                 type="button"
                                 onClick={() => { setFilterStatus(status as OrderStatus); setCurrentPage(1); }}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                                    isActive
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${isActive
                                         ? 'bg-slate-900 text-white shadow-2xs'
                                         : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/70'
-                                }`}
+                                    }`}
                             >
                                 <span>{config.label}</span>
                                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-600'}`}>
@@ -1169,11 +1170,10 @@ export default function AdminOrdersPage() {
                                             key={page}
                                             type="button"
                                             onClick={() => setCurrentPage(page)}
-                                            className={`h-7 min-w-7 rounded-md px-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                                                currentPage === page
+                                            className={`h-7 min-w-7 rounded-md px-1.5 text-xs font-semibold transition-colors cursor-pointer ${currentPage === page
                                                     ? 'bg-slate-900 text-white shadow-2xs'
                                                     : 'text-slate-600 hover:bg-slate-200/60'
-                                            }`}
+                                                }`}
                                         >
                                             {page}
                                         </button>
@@ -1327,173 +1327,174 @@ export default function AdminOrdersPage() {
                                                 const completedBundleCount = item.bundleItems?.filter(bundleItem => bundleItem.status).length || 0;
 
                                                 return (
-                                                <div key={idx} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-                                                    <div className="min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <p className="text-sm font-semibold text-gray-900">{item.productName}</p>
-                                                            {item.bundleItems && item.bundleItems.length > 0 && (
-                                                                <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                                                                    เซต {item.bundleItems.length} รายการ
-                                                                </span>
-                                                            )}
-                                                            {item.status && (
-                                                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${itemStatusConfig[item.status].bg} ${itemStatusConfig[item.status].color}`}>
-                                                                    {itemStatusConfig[item.status].icon}
-                                                                    {itemStatusConfig[item.status].label}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <p className="mt-1 text-xs text-gray-400">฿{item.price.toLocaleString()} × {item.quantity}</p>
-                                                        {item.addOns && item.addOns.length > 0 && (
-                                                            <div className="mt-1 space-y-0.5">
-                                                                {item.addOns.map(addOn => (
-                                                                    <p key={addOn.id} className="text-[11px] text-gray-500">
-                                                                        {addOn.name}{addOn.value ? `: ${addOn.value}` : ""} {addOn.price > 0 ? `(+฿${addOn.price.toLocaleString()})` : ""}
-                                                                    </p>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        {hasBundleItems && item.bundleItems && (
-                                                            <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-blue-50/60">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => toggleBundleExpanded(selectedOrder.id, idx)}
-                                                                    className="flex w-full items-center justify-between border-b border-blue-100 px-3 py-2 text-left transition-colors hover:bg-blue-100/50"
-                                                                    aria-expanded={isBundleExpanded}
-                                                                >
-                                                                    <div>
-                                                                        <span className="block text-[11px] font-semibold text-blue-900">รายการในเซต</span>
-                                                                        <span className="text-[10px] text-blue-500">
-                                                                            {isBundleExpanded ? "กดเพื่อพับรายการ" : `พับอยู่ แสดง ${completedBundleCount}/${item.bundleItems.length} รายการที่มีสถานะ`}
-                                                                        </span>
-                                                                    </div>
-                                                                    <ChevronDown className={`h-4 w-4 text-blue-500 transition-transform ${isBundleExpanded ? "rotate-180" : ""}`} />
-                                                                </button>
-                                                                <div className="hidden">
-                                                                    <span className="text-[11px] font-semibold text-blue-900">รายการในเซต</span>
-                                                                    <span className="text-[10px] text-blue-500">ตั้งสถานะรายชิ้นได้</span>
-                                                                </div>
-                                                                {isBundleExpanded && (
-                                                                <div className="divide-y divide-blue-100">
-                                                                    {item.bundleItems.map((bundleItem, bundleIndex) => (
-                                                                        <div key={`${bundleItem.id}-${bundleIndex}`} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between">
-                                                                            <div className="min-w-0">
-                                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                                    <p className="text-xs font-semibold text-gray-900">
-                                                                                        {bundleItem.productName}
-                                                                                        {bundleItem.variantName ? <span className="font-normal text-gray-500"> ({bundleItem.variantName})</span> : null}
-                                                                                    </p>
-                                                                                    {bundleItem.status && (
-                                                                                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${itemStatusConfig[bundleItem.status].bg} ${itemStatusConfig[bundleItem.status].color}`}>
-                                                                                            {itemStatusConfig[bundleItem.status].icon}
-                                                                                            {itemStatusConfig[bundleItem.status].label}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <p className="mt-0.5 text-[11px] text-gray-500">
-                                                                                    ฿{(bundleItem.unitPrice || 0).toLocaleString()} × {bundleItem.quantity * item.quantity}
-                                                                                </p>
-                                                                                {bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0 && (
-                                                                                    <div className="mt-1 space-y-0.5">
-                                                                                        {bundleItem.selectedAddOns.map(addOn => (
-                                                                                            <p key={addOn.id} className="text-[10px] text-gray-500">
-                                                                                                {addOn.name}{addOn.value ? `: ${addOn.value}` : ""} {addOn.price > 0 ? `(+฿${addOn.price.toLocaleString()})` : ""}
-                                                                                            </p>
-                                                                                        ))}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                            <select
-                                                                                value={isSelectableItemStatus(bundleItem.status) ? bundleItem.status : ""}
-                                                                                onChange={(e) => handleBundleItemStatusChange(selectedOrder, idx, bundleIndex, e.target.value as OrderItemStatus)}
-                                                                                disabled={updatingItemKey === `${selectedOrder.id}-${idx}-${bundleIndex}`}
-                                                                                className="h-8 w-full rounded-lg border border-blue-100 bg-white px-2 text-[11px] font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-32"
-                                                                                aria-label={`สถานะสินค้าในเซต ${bundleItem.productName}`}
-                                                                            >
-                                                                                <option value="" disabled>รายชิ้น</option>
-                                                                                {itemStatusEntries.map(([status, config]) => (
-                                                                                    <option key={status} value={status}>
-                                                                                        {config.label}
-                                                                                    </option>
-                                                                                ))}
-                                                                            </select>
-                                                                            {bundleItem.status === "ready" && pickupOptions.length > 0 && (
-                                                                                <select
-                                                                                    value={bundleItem.pickupOptionId || pickupOptions[0]?.id || ""}
-                                                                                    onChange={(e) => handleBundleItemPickupChange(selectedOrder, idx, bundleIndex, e.target.value)}
-                                                                                    disabled={updatingItemKey === `${selectedOrder.id}-${idx}-${bundleIndex}-pickup`}
-                                                                                    className="h-8 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-44"
-                                                                                    aria-label={`สถานที่รับสินค้าในเซต ${bundleItem.productName}`}
-                                                                                >
-                                                                                    {pickupOptions.map((option) => (
-                                                                                        <option key={option.id} value={option.id}>
-                                                                                            {option.label}
-                                                                                        </option>
-                                                                                    ))}
-                                                                                </select>
-                                                                            )}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                        {item.issueReason && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openIssueReply(selectedOrder, idx)}
-                                                                className="mt-2 w-full rounded-lg border border-orange-100 bg-orange-50 px-2 py-1.5 text-left text-[11px] text-orange-700 transition-colors hover:border-orange-200 hover:bg-orange-100"
-                                                            >
-                                                                <span className="font-semibold">
-                                                                    {item.issueReportedByCustomer ? "ลูกค้าแจ้งปัญหา" : "เหตุผล"}:
-                                                                </span>{" "}
-                                                                {item.issueReason}
-                                                                {item.issueAdminReply && (
-                                                                    <span className="mt-1 block border-t border-orange-100 pt-1 text-orange-800">
-                                                                        <span className="font-semibold">แอดมินตอบกลับ:</span>{" "}
-                                                                        {item.issueAdminReply}
+                                                    <div key={idx} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                                                        <div className="min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <p className="text-sm font-semibold text-gray-900">{item.productName}</p>
+                                                                {item.bundleItems && item.bundleItems.length > 0 && (
+                                                                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                                                        เซต {item.bundleItems.length} รายการ
                                                                     </span>
                                                                 )}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-                                                        <p className="text-sm font-bold text-gray-900">฿{(item.price * item.quantity).toLocaleString()}</p>
-                                                        {hasBundleItems && (
-                                                            <span className="text-[10px] font-semibold text-blue-600">อัปเดตทั้งเซต</span>
-                                                        )}
-                                                        <select
-                                                            value={isSelectableItemStatus(item.status) ? item.status : ""}
-                                                            onChange={(e) => handleItemStatusChange(selectedOrder, idx, e.target.value as OrderItemStatus)}
-                                                            disabled={updatingItemKey === `${selectedOrder.id}-${idx}`}
-                                                            className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                                                            aria-label={`สถานะสินค้า ${item.productName}`}
-                                                        >
-                                                            <option value="" disabled>เลือกสถานะ</option>
-                                                            {itemStatusEntries.map(([status, config]) => (
-                                                                <option key={status} value={status}>
-                                                                    {config.label}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        {item.status === "ready" && pickupOptions.length > 0 && (
+                                                                {item.status && (
+                                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${itemStatusConfig[item.status].bg} ${itemStatusConfig[item.status].color}`}>
+                                                                        {itemStatusConfig[item.status].icon}
+                                                                        {itemStatusConfig[item.status].label}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="mt-1 text-xs text-gray-400">฿{item.price.toLocaleString()} × {item.quantity}</p>
+                                                            {item.addOns && item.addOns.length > 0 && (
+                                                                <div className="mt-1 space-y-0.5">
+                                                                    {item.addOns.map(addOn => (
+                                                                        <p key={addOn.id} className="text-[11px] text-gray-500">
+                                                                            {addOn.name}{addOn.value ? `: ${addOn.value}` : ""} {addOn.price > 0 ? `(+฿${addOn.price.toLocaleString()})` : ""}
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            {hasBundleItems && item.bundleItems && (
+                                                                <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-blue-50/60">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => toggleBundleExpanded(selectedOrder.id, idx)}
+                                                                        className="flex w-full items-center justify-between border-b border-blue-100 px-3 py-2 text-left transition-colors hover:bg-blue-100/50"
+                                                                        aria-expanded={isBundleExpanded}
+                                                                    >
+                                                                        <div>
+                                                                            <span className="block text-[11px] font-semibold text-blue-900">รายการในเซต</span>
+                                                                            <span className="text-[10px] text-blue-500">
+                                                                                {isBundleExpanded ? "กดเพื่อพับรายการ" : `พับอยู่ แสดง ${completedBundleCount}/${item.bundleItems.length} รายการที่มีสถานะ`}
+                                                                            </span>
+                                                                        </div>
+                                                                        <ChevronDown className={`h-4 w-4 text-blue-500 transition-transform ${isBundleExpanded ? "rotate-180" : ""}`} />
+                                                                    </button>
+                                                                    <div className="hidden">
+                                                                        <span className="text-[11px] font-semibold text-blue-900">รายการในเซต</span>
+                                                                        <span className="text-[10px] text-blue-500">ตั้งสถานะรายชิ้นได้</span>
+                                                                    </div>
+                                                                    {isBundleExpanded && (
+                                                                        <div className="divide-y divide-blue-100">
+                                                                            {item.bundleItems.map((bundleItem, bundleIndex) => (
+                                                                                <div key={`${bundleItem.id}-${bundleIndex}`} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between">
+                                                                                    <div className="min-w-0">
+                                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                                            <p className="text-xs font-semibold text-gray-900">
+                                                                                                {bundleItem.productName}
+                                                                                                {bundleItem.variantName ? <span className="font-normal text-gray-500"> ({bundleItem.variantName})</span> : null}
+                                                                                            </p>
+                                                                                            {bundleItem.status && (
+                                                                                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${itemStatusConfig[bundleItem.status].bg} ${itemStatusConfig[bundleItem.status].color}`}>
+                                                                                                    {itemStatusConfig[bundleItem.status].icon}
+                                                                                                    {itemStatusConfig[bundleItem.status].label}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <p className="mt-0.5 text-[11px] text-gray-500">
+                                                                                            ฿{(bundleItem.unitPrice || 0).toLocaleString()} × {bundleItem.quantity * item.quantity}
+                                                                                        </p>
+                                                                                        {bundleItem.selectedAddOns && bundleItem.selectedAddOns.length > 0 && (
+                                                                                            <div className="mt-1 space-y-0.5">
+                                                                                                {bundleItem.selectedAddOns.map(addOn => (
+                                                                                                    <p key={addOn.id} className="text-[10px] text-gray-500">
+                                                                                                        {addOn.name}{addOn.value ? `: ${addOn.value}` : ""} {addOn.price > 0 ? `(+฿${addOn.price.toLocaleString()})` : ""}
+                                                                                                    </p>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <select
+                                                                                        value={isSelectableItemStatus(bundleItem.status) ? bundleItem.status : ""}
+                                                                                        onChange={(e) => handleBundleItemStatusChange(selectedOrder, idx, bundleIndex, e.target.value as OrderItemStatus)}
+                                                                                        disabled={updatingItemKey === `${selectedOrder.id}-${idx}-${bundleIndex}`}
+                                                                                        className="h-8 w-full rounded-lg border border-blue-100 bg-white px-2 text-[11px] font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-32"
+                                                                                        aria-label={`สถานะสินค้าในเซต ${bundleItem.productName}`}
+                                                                                    >
+                                                                                        <option value="" disabled>รายชิ้น</option>
+                                                                                        {itemStatusEntries.map(([status, config]) => (
+                                                                                            <option key={status} value={status}>
+                                                                                                {config.label}
+                                                                                            </option>
+                                                                                        ))}
+                                                                                    </select>
+                                                                                    {bundleItem.status === "ready" && pickupOptions.length > 0 && (
+                                                                                        <select
+                                                                                            value={bundleItem.pickupOptionId || pickupOptions[0]?.id || ""}
+                                                                                            onChange={(e) => handleBundleItemPickupChange(selectedOrder, idx, bundleIndex, e.target.value)}
+                                                                                            disabled={updatingItemKey === `${selectedOrder.id}-${idx}-${bundleIndex}-pickup`}
+                                                                                            className="h-8 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-44"
+                                                                                            aria-label={`สถานที่รับสินค้าในเซต ${bundleItem.productName}`}
+                                                                                        >
+                                                                                            {pickupOptions.map((option) => (
+                                                                                                <option key={option.id} value={option.id}>
+                                                                                                    {option.label}
+                                                                                                </option>
+                                                                                            ))}
+                                                                                        </select>
+                                                                                    )}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {item.issueReason && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openIssueReply(selectedOrder, idx)}
+                                                                    className="mt-2 w-full rounded-lg border border-orange-100 bg-orange-50 px-2 py-1.5 text-left text-[11px] text-orange-700 transition-colors hover:border-orange-200 hover:bg-orange-100"
+                                                                >
+                                                                    <span className="font-semibold">
+                                                                        {item.issueReportedByCustomer ? "ลูกค้าแจ้งปัญหา" : "เหตุผล"}:
+                                                                    </span>{" "}
+                                                                    {item.issueReason}
+                                                                    {item.issueAdminReply && (
+                                                                        <span className="mt-1 block border-t border-orange-100 pt-1 text-orange-800">
+                                                                            <span className="font-semibold">แอดมินตอบกลับ:</span>{" "}
+                                                                            {item.issueAdminReply}
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+                                                            <p className="text-sm font-bold text-gray-900">฿{(item.price * item.quantity).toLocaleString()}</p>
+                                                            {hasBundleItems && (
+                                                                <span className="text-[10px] font-semibold text-blue-600">อัปเดตทั้งเซต</span>
+                                                            )}
                                                             <select
-                                                                value={item.pickupOptionId || pickupOptions[0]?.id || ""}
-                                                                onChange={(e) => handleItemPickupChange(selectedOrder, idx, e.target.value)}
-                                                                disabled={updatingItemKey === `${selectedOrder.id}-${idx}-pickup`}
-                                                                className="h-9 rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-48"
-                                                                aria-label={`สถานที่รับ ${item.productName}`}
+                                                                value={isSelectableItemStatus(item.status) ? item.status : ""}
+                                                                onChange={(e) => handleItemStatusChange(selectedOrder, idx, e.target.value as OrderItemStatus)}
+                                                                disabled={updatingItemKey === `${selectedOrder.id}-${idx}`}
+                                                                className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                aria-label={`สถานะสินค้า ${item.productName}`}
                                                             >
-                                                                {pickupOptions.map((option) => (
-                                                                    <option key={option.id} value={option.id}>
-                                                                        {option.label}
+                                                                <option value="" disabled>เลือกสถานะ</option>
+                                                                {itemStatusEntries.map(([status, config]) => (
+                                                                    <option key={status} value={status}>
+                                                                        {config.label}
                                                                     </option>
                                                                 ))}
                                                             </select>
-                                                        )}
+                                                            {item.status === "ready" && pickupOptions.length > 0 && (
+                                                                <select
+                                                                    value={item.pickupOptionId || pickupOptions[0]?.id || ""}
+                                                                    onChange={(e) => handleItemPickupChange(selectedOrder, idx, e.target.value)}
+                                                                    disabled={updatingItemKey === `${selectedOrder.id}-${idx}-pickup`}
+                                                                    className="h-9 rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-800 outline-none transition-colors focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-48"
+                                                                    aria-label={`สถานที่รับ ${item.productName}`}
+                                                                >
+                                                                    {pickupOptions.map((option) => (
+                                                                        <option key={option.id} value={option.id}>
+                                                                            {option.label}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )})}
+                                                )
+                                            })}
                                         </div>
                                         <div className="compact-order-total flex items-center justify-between border-t border-gray-100 bg-gray-50 px-4 py-2.5">
                                             <span className="text-sm font-semibold text-gray-700">รวมทั้งสิ้น</span>

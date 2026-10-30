@@ -221,6 +221,8 @@ export default function AdminReportsPage() {
     const [exportScope, setExportScope] = useState<'all' | 'selected'>('all');
 
     useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+
         const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const items = snapshot.docs.map((docSnap) => {

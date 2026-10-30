@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Product, ProductBundleItem, ProductGuide, ProductVariant, SelectedProductAddOn } from "@/types/product";
 import { AlertTriangle, ChevronLeft, Image as ImageIcon, Minus, Plus, ShoppingBag, Check, Package, Megaphone, XCircle } from "lucide-react";
@@ -22,7 +22,7 @@ const formatImageUrl = (url?: string) => {
 
 export default function ProductDetailPage() {
     const { id } = useParams();
-    const { addToCart, totalItems } = useCart();
+    const { addToCart, totalItems, cartItems } = useCart();
     const { promotions } = usePromotions(); // Use global promotions
 
     const [product, setProduct] = useState<Product | null>(null);
@@ -153,6 +153,19 @@ export default function ProductDetailPage() {
             }
         };
         fetchData();
+
+        // Release any unpaid pending orders that previously locked stock
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+
+        // Listen to live stock updates for this product
+        const unsubscribeProduct = onSnapshot(doc(db, "products", id as string), (snap) => {
+            if (snap.exists()) {
+                const liveData = { id: snap.id, ...snap.data() } as Product;
+                setProduct(prev => prev ? { ...prev, stock: liveData.stock, variants: liveData.variants, isActive: liveData.isActive } : liveData);
+            }
+        });
+
+        return () => unsubscribeProduct();
     }, [id]);
 
     const images = useMemo(() => {
@@ -336,8 +349,20 @@ export default function ProductDetailPage() {
     const currentStock = isBundleProduct
         ? bundleAvailableStock
         : activeVariant?.stock ?? (isVariantProduct ? 0 : product?.stock ?? 0);
+    const inCartQty = useMemo(() => {
+        if (!product || hasCustomSelection) return 0;
+        return cartItems.reduce((sum, item) => {
+            if (item.id !== product.id) return sum;
+            if (activeVariant?.id) {
+                return item.selectedVariant?.id === activeVariant.id ? sum + item.quantity : sum;
+            }
+            return sum + item.quantity;
+        }, 0);
+    }, [cartItems, product, activeVariant?.id, hasCustomSelection]);
+    const remainingStockToAdd = hasCustomSelection ? 9999 : Math.max(0, currentStock - inCartQty);
     const isOutOfStock = currentStock === 0;
-    const canPurchase = Boolean(product) && !isVariantSelectionMissing && !bundleSelectionMissing && bundleAddOnsComplete && currentStock > 0 && qty <= currentStock;
+    const isCartLimitReached = !isOutOfStock && remainingStockToAdd === 0;
+    const canPurchase = Boolean(product) && !isVariantSelectionMissing && !bundleSelectionMissing && bundleAddOnsComplete && currentStock > 0 && remainingStockToAdd > 0 && qty <= remainingStockToAdd;
     const stockStatusLabel = hasCustomSelection
         ? customSelectionComplete
             ? "ตัวเลือกกำหนดเอง"
@@ -348,7 +373,9 @@ export default function ProductDetailPage() {
             ? "ไม่มีตัวเลือกนี้"
             : isOutOfStock
                 ? "สินค้าหมด"
-                : `เหลือ ${currentStock} ชิ้น`;
+                : isCartLimitReached
+                    ? `เหลือ ${currentStock} ชิ้น (อยู่ในตะกร้าแล้ว ${inCartQty} ชิ้น)`
+                    : `เหลือ ${currentStock} ชิ้น`;
     const stockStatusClass = hasCustomSelection
         ? "bg-amber-50 text-amber-700"
         : isOutOfStock || isVariantSelectionMissing
@@ -356,12 +383,12 @@ export default function ProductDetailPage() {
             : "bg-green-50 text-green-600";
 
     useEffect(() => {
-        if (currentStock <= 0) {
+        if (remainingStockToAdd <= 0) {
             setQty(1);
             return;
         }
-        setQty(prev => Math.min(Math.max(1, prev), currentStock));
-    }, [currentStock]);
+        setQty(prev => Math.min(Math.max(1, prev), remainingStockToAdd));
+    }, [remainingStockToAdd]);
 
     // Calculate Automatic Discount (Flash Sale / Auto)
     const bestAutoPromo = useMemo(() => {
@@ -799,8 +826,8 @@ export default function ProductDetailPage() {
                             <span className="w-7 text-center font-bold text-gray-900">{qty}</span>
                             <button
                                 type="button"
-                                onClick={() => setQty(Math.min(currentStock || 99, qty + 1))}
-                                disabled={currentStock <= 0 || qty >= currentStock}
+                                onClick={() => setQty(Math.min(remainingStockToAdd || 1, qty + 1))}
+                                disabled={remainingStockToAdd <= 0 || qty >= remainingStockToAdd}
                                 className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-30"
                                 aria-label="เพิ่มจำนวน"
                             >
@@ -1132,7 +1159,7 @@ export default function ProductDetailPage() {
                             }
                         `}
                     >
-                        {!addOnsComplete || !bundleAddOnsComplete ? 'กรอกบริการเสริมให้ครบ' : bundleSelectionMissing ? 'เลือกตัวเลือกในเซต' : isVariantSelectionMissing ? 'ไม่มีตัวเลือกนี้' : isOutOfStock ? 'สินค้าหมด' : `เพิ่มไปยังตะกร้า • ฿${(totalUnitPrice * qty).toLocaleString()}`}
+                        {!addOnsComplete || !bundleAddOnsComplete ? 'กรอกบริการเสริมให้ครบ' : bundleSelectionMissing ? 'เลือกตัวเลือกในเซต' : isVariantSelectionMissing ? 'ไม่มีตัวเลือกนี้' : isOutOfStock ? 'สินค้าหมด' : isCartLimitReached ? 'ในตะกร้าครบสต็อกแล้ว' : `เพิ่มไปยังตะกร้า • ฿${(totalUnitPrice * qty).toLocaleString()}`}
                     </button>
 
                     {/* Cart Button */}

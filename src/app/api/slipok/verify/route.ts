@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
 import { buildAdminPaymentFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
+import { checkOrderStockAvailable, deductOrderStock, releaseUnpaidPendingOrdersStock } from "@/lib/stockManagement";
 
 export const runtime = "nodejs";
 
@@ -104,12 +105,52 @@ export async function POST(req: Request) {
     }
 
     const db = admin.firestore();
+    await releaseUnpaidPendingOrdersStock(db);
+
     const slipRef = db.doc(`payment_slips/${slipId}`);
     const slipSnap = await slipRef.get();
     if (!slipSnap.exists) {
       return NextResponse.json({ error: "Slip not found" }, { status: 404 });
     }
     const slip = slipSnap.data() || {};
+
+    let orderData: Record<string, unknown> | null = null;
+    if (slip.orderId) {
+      const orderSnap = await db.doc(`orders/${slip.orderId}`).get();
+      if (orderSnap.exists) orderData = (orderSnap.data() || {}) as Record<string, unknown>;
+    }
+
+    if (orderData) {
+      if (orderData.status === "cancelled") {
+        await slipRef.update({
+          needsVerify: false,
+          verifyStatus: "rejected",
+          verifyMessage: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว",
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return NextResponse.json(
+          { error: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว ไม่สามารถชำระเงินได้", verifyStatus: "rejected", verifyMessage: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว" },
+          { status: 400 }
+        );
+      }
+
+      if (orderData.stockDeducted !== true) {
+        const stockCheck = await checkOrderStockAvailable(db, orderData);
+        if (!stockCheck.available) {
+          const outOfStockMsg = `ขออภัย สินค้าหมดโควต้าแล้ว (${stockCheck.insufficientItems.join(", ")})`;
+          await slipRef.update({
+            needsVerify: false,
+            verifyStatus: "rejected",
+            verifyMessage: outOfStockMsg,
+            verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          return NextResponse.json(
+            { error: outOfStockMsg, verifyStatus: "rejected", verifyMessage: outOfStockMsg },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const settingsSnap = await db.doc("settings/store").get();
     if (!settingsSnap.exists) {
@@ -185,17 +226,37 @@ export async function POST(req: Request) {
       verifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    let orderData: Record<string, unknown> | null = null;
     if (slip.orderId) {
       const orderSnap = await db.doc(`orders/${slip.orderId}`).get();
       if (orderSnap.exists) orderData = (orderSnap.data() || {}) as Record<string, unknown>;
     }
 
     if (slip.orderId && verifyStatus === "verified") {
+      const deducted = await deductOrderStock(
+        db,
+        { ...(orderData || {}), orderId: String(slip.orderId) },
+        String(slip.orderId),
+        { strict: true }
+      );
+
+      if (!deducted) {
+        const outOfStockMsg = "ขออภัย สินค้าในคำสั่งซื้อนี้จำหน่ายหมดแล้ว (ครบจำนวนที่กำหนด)";
+        await slipRef.update({
+          verifyStatus: "rejected",
+          verifyMessage: outOfStockMsg,
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return NextResponse.json(
+          { error: outOfStockMsg, verifyStatus: "rejected", verifyMessage: outOfStockMsg },
+          { status: 400 }
+        );
+      }
+
       await db.doc(`orders/${slip.orderId}`).set(
         {
           status: "paid",
           paymentStatus: "verified",
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
           paymentVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         },
@@ -205,7 +266,7 @@ export async function POST(req: Request) {
       await notifyPaymentVerified(
         settings,
         orderData,
-        slip.orderId,
+        String(slip.orderId),
         verifiedAmount ?? toNumber(slip.amount),
         skipCustomerNotify
       );

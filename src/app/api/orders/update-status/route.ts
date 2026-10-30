@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import admin, { isFirebaseAdminReady } from "@/lib/firebaseAdmin";
 import { buildAdminPaymentFlex, buildOrderStatusFlex, sendLineMessage } from "@/lib/lineNotify";
-import { restoreOrderStock, deductOrderStock } from "@/lib/stockManagement";
+import { restoreOrderStock, deductOrderStock, checkOrderStockAvailable, releaseUnpaidPendingOrdersStock } from "@/lib/stockManagement";
 import { verifyAdminRequest } from "@/lib/authHelper";
 
 export const runtime = "nodejs";
@@ -58,6 +58,8 @@ export async function POST(req: Request) {
     }
 
     const db = admin.firestore();
+    await releaseUnpaidPendingOrdersStock(db);
+
     const orderRef = db.doc(`orders/${orderId}`);
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) {
@@ -114,8 +116,23 @@ export async function POST(req: Request) {
           }
         }
       }
-    } else if (status === "paid") {
-      await deductOrderStock(db, orderData, orderId);
+    } else if (status === "paid" || status === "shipped" || status === "completed") {
+      if (orderData.stockDeducted !== true) {
+        const stockCheck = await checkOrderStockAvailable(db, orderData);
+        if (!stockCheck.available) {
+          return NextResponse.json(
+            { error: `ไม่สามารถยืนยันได้ เนื่องจากสินค้าหมดแล้ว (${stockCheck.insufficientItems.join(", ")})` },
+            { status: 400 }
+          );
+        }
+      }
+      const deducted = await deductOrderStock(db, orderData, orderId, { strict: true });
+      if (!deducted) {
+        return NextResponse.json(
+          { error: "ไม่สามารถตัดสต็อกได้เนื่องจากสินค้าหมดแล้ว" },
+          { status: 400 }
+        );
+      }
     }
 
     const order = (orderSnap.data() || {}) as OrderStatusUpdateData;

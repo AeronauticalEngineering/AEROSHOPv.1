@@ -20,7 +20,7 @@ async function resolveCustomerLineId(db: FirebaseFirestore.Firestore, order: Rec
   return typeof lineId === "string" && lineId ? lineId : null;
 }
 
-import { deductOrderStock } from "@/lib/stockManagement";
+import { deductOrderStock, releaseUnpaidPendingOrdersStock } from "@/lib/stockManagement";
 
 
 export async function POST(req: Request) {
@@ -37,6 +37,8 @@ export async function POST(req: Request) {
     }
 
     const db = admin.firestore();
+    await releaseUnpaidPendingOrdersStock(db);
+
     const notificationRef = db.doc(`order_notification_locks/${orderId}_created`);
     try {
       await notificationRef.create({
@@ -59,8 +61,16 @@ export async function POST(req: Request) {
     }
     const order = orderSnap.data() || {};
     
-    // Deduct stock asynchronously
-    await deductOrderStock(db, { ...order, orderId }, orderId);
+    const isAlreadyPaid =
+      order.paymentStatus === "paid" ||
+      order.paymentStatus === "verified" ||
+      order.status === "paid" ||
+      order.status === "completed";
+
+    // ตัดสต็อกเฉพาะเมื่อชำระเงินแล้วเท่านั้น ("ใครจ่ายก่อนได้ก่อน ถ้าไม่จ่ายของยังอยู่ไม่ตัด")
+    if (isAlreadyPaid) {
+      await deductOrderStock(db, { ...order, orderId }, orderId, { strict: true });
+    }
 
     const settingsSnap = await db.doc("settings/store").get();
     if (!settingsSnap.exists) return NextResponse.json({ ok: true });

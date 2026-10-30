@@ -14,7 +14,8 @@ import useLiff from "@/hooks/useLiff";
 import { useAuth } from "@/context/AuthContext";
 import useLiffAuth from "@/hooks/useLiffAuth";
 import { buildIssueReportFlexMessage, buildSlipResultFlexMessage } from "@/lib/line/flex";
-import { ProductBundleItem, SelectedProductAddOn } from "@/types/product";
+import { Product, ProductBundleItem, SelectedProductAddOn } from "@/types/product";
+import { validateItemsStockAgainstLive } from "@/lib/productStock";
 import { formatOrderId } from "@/lib/orderId";
 import { compressSlipImage } from "@/lib/imageCompression";
 
@@ -25,6 +26,7 @@ interface OrderItem {
     price: number;
     status?: OrderItemStatus;
     imageUrl?: string;
+    variantId?: string | null;
     variantInfo?: string;
     addOns?: SelectedProductAddOn[];
     bundleItems?: ProductBundleItem[];
@@ -72,6 +74,7 @@ interface Order {
     cancelReason?: string | null;
     refundChannel?: string | null;
     paymentStatus?: string | null;
+    stockDeducted?: boolean;
 }
 
 export default function OrderDetailPage() {
@@ -105,6 +108,66 @@ export default function OrderDetailPage() {
     const [slipStatus, setSlipStatus] = useState<{ status: string, message: string }>({ status: '', message: '' });
     const [isSlipModalOpen, setIsSlipModalOpen] = useState(false);
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+    const [liveProducts, setLiveProducts] = useState<Record<string, Product>>({});
+
+    useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+    }, []);
+
+    const orderProductIdsKey = useMemo(() => {
+        if (!order?.items?.length) return "";
+        const ids = new Set<string>();
+        order.items.forEach((item) => {
+            if (item.productId) ids.add(item.productId);
+            item.bundleItems?.forEach((b) => {
+                if (b.productId) ids.add(b.productId);
+            });
+        });
+        return Array.from(ids).sort().join(",");
+    }, [order?.items]);
+
+    useEffect(() => {
+        if (!orderProductIdsKey) return;
+        const ids = orderProductIdsKey.split(",").filter(Boolean);
+        const unsubs = ids.map((pid) =>
+            onSnapshot(doc(db, "products", pid), (snap) => {
+                if (snap.exists()) {
+                    setLiveProducts((prev) => ({
+                        ...prev,
+                        [snap.id]: { id: snap.id, ...snap.data() } as Product
+                    }));
+                }
+            })
+        );
+        return () => {
+            unsubs.forEach((u) => u());
+        };
+    }, [orderProductIdsKey]);
+
+    const orderStockValidation = useMemo(
+        () => validateItemsStockAgainstLive(order?.items || [], liveProducts),
+        [order?.items, liveProducts]
+    );
+    const isOrderAlreadyPaidOrDeducted = Boolean(
+        order?.stockDeducted ||
+        order?.status === "paid" ||
+        order?.status === "shipped" ||
+        order?.status === "completed" ||
+        order?.paymentStatus === "verified" ||
+        order?.paymentStatus === "paid"
+    );
+    const isUnpaidOrderOutOfStock = Boolean(
+        order &&
+        order.status === "pending" &&
+        !isOrderAlreadyPaidOrDeducted &&
+        !orderStockValidation.isAvailable
+    );
+
+    useEffect(() => {
+        if (isUnpaidOrderOutOfStock && isSlipModalOpen) {
+            setIsSlipModalOpen(false);
+        }
+    }, [isUnpaidOrderOutOfStock, isSlipModalOpen]);
 
     // Order edit request state (Add-ons / Items)
     const [pendingOrderRequest, setPendingOrderRequest] = useState<{ id: string; details: string; reason: string; itemName?: string } | null>(null);
@@ -602,7 +665,7 @@ export default function OrderDetailPage() {
     };
 
     const handleSlipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!order || ["cancelled", "completed", "returned"].includes(order.status)) return;
+        if (!order || ["cancelled", "completed", "returned"].includes(order.status) || isUnpaidOrderOutOfStock) return;
         const file = e.target.files?.[0];
         if (!file) return;
         setSlipError("");
@@ -640,7 +703,7 @@ export default function OrderDetailPage() {
 
     const handleSlipUpload = async (fileOverride?: File) => {
         const fileToUpload = fileOverride || slipFile;
-        if (!orderId || !order || !fileToUpload || slipUploading) return;
+        if (!orderId || !order || !fileToUpload || slipUploading || isUnpaidOrderOutOfStock) return;
         if (["cancelled", "completed", "returned"].includes(order.status)) return;
         setSlipUploading(true);
         setSlipError("");
@@ -792,7 +855,7 @@ export default function OrderDetailPage() {
     const deliveryFee = order?.deliveryFee ?? (order ? order.totalAmount - (subtotal - (order.totalDiscount || 0)) : 0);
     const totalDiscount = order?.totalDiscount || 0;
     const isCancelledOrder = order?.status === 'cancelled';
-    const canUsePayment = order ? !["cancelled", "completed", "returned"].includes(order.status) : false;
+    const canUsePayment = order ? !["cancelled", "completed", "returned"].includes(order.status) && !isUnpaidOrderOutOfStock : false;
     const canChangePayment = order?.status === 'pending' && canUsePayment;
     const selectedPaymentMethod = order?.paymentMethod === 'pay_later' ? "" : (order?.paymentMethod || "");
     const isSlipPayment = selectedPaymentMethod === 'bank_transfer' || selectedPaymentMethod === 'promptpay';
@@ -1237,6 +1300,12 @@ export default function OrderDetailPage() {
                         {isCancelledOrder && (
                             <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-3 text-center text-xs font-medium text-red-700">
                                 คำสั่งซื้อนี้ถูกยกเลิกแล้ว ระบบปิดการชำระเงินสำหรับออเดอร์นี้
+                            </div>
+                        )}
+
+                        {isUnpaidOrderOutOfStock && !isCancelledOrder && (
+                            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-center text-xs font-semibold text-red-700">
+                                ขออภัย สินค้าในคำสั่งซื้อนี้มีผู้ชำระเงินครบจำนวนแล้ว ({orderStockValidation.outOfStockNames.join(", ")}) ระบบจึงปิดรับการชำระเงินสำหรับออเดอร์นี้
                             </div>
                         )}
 

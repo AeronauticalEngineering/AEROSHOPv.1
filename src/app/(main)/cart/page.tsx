@@ -11,6 +11,8 @@ import { useAuth } from "@/context/AuthContext";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ShippingOption, StoreSettings } from "@/types/store";
+import { Product } from "@/types/product";
+import { getItemLiveAvailableStock, validateItemsStockAgainstLive } from "@/lib/productStock";
 
 type DateLike = string | number | Date | { toDate: () => Date };
 
@@ -31,6 +33,45 @@ export default function CartPage() {
     const [showManualInput, setShowManualInput] = useState(false);
     const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
     const [selectedShippingOptionId, setSelectedShippingOptionId] = useState("");
+    const [liveProducts, setLiveProducts] = useState<Record<string, Product>>({});
+
+    useEffect(() => {
+        fetch("/api/orders/release-unpaid-stock", { method: "POST" }).catch(() => undefined);
+    }, []);
+
+    const cartProductIdsKey = useMemo(() => {
+        const ids = new Set<string>();
+        cartItems.forEach((item) => {
+            if (item.id) ids.add(item.id);
+            item.bundleItems?.forEach((b) => {
+                if (b.productId) ids.add(b.productId);
+            });
+        });
+        return Array.from(ids).sort().join(",");
+    }, [cartItems]);
+
+    useEffect(() => {
+        if (!cartProductIdsKey) return;
+        const ids = cartProductIdsKey.split(",").filter(Boolean);
+        const unsubs = ids.map((pid) =>
+            onSnapshot(doc(db, "products", pid), (snap) => {
+                if (snap.exists()) {
+                    setLiveProducts((prev) => ({
+                        ...prev,
+                        [snap.id]: { id: snap.id, ...snap.data() } as Product
+                    }));
+                }
+            })
+        );
+        return () => {
+            unsubs.forEach((u) => u());
+        };
+    }, [cartProductIdsKey]);
+
+    const stockValidation = useMemo(
+        () => validateItemsStockAgainstLive(cartItems, liveProducts),
+        [cartItems, liveProducts]
+    );
 
     useEffect(() => {
         const unsubscribe = onSnapshot(doc(db, "settings", "store"), (doc) => {
@@ -518,6 +559,24 @@ export default function CartPage() {
                                                     }
                                                 </div>
                                             )}
+                                            {(() => {
+                                                const availableStock = getItemLiveAvailableStock(item, liveProducts);
+                                                if (availableStock === 0) {
+                                                    return (
+                                                        <p className="mt-1 text-[11px] font-bold text-red-600">
+                                                            สินค้าหมดแล้ว กรุณาลบออกจากตะกร้า
+                                                        </p>
+                                                    );
+                                                }
+                                                if (item.quantity > availableStock) {
+                                                    return (
+                                                        <p className="mt-1 text-[11px] font-bold text-amber-600">
+                                                            เหลือเพียง {availableStock} ชิ้น กรุณาลดจำนวน
+                                                        </p>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                         <button
                                             onClick={() => removeFromCart(item.cartItemId)}
@@ -540,21 +599,28 @@ export default function CartPage() {
                                         </div>
 
                                         {/* Quantity Controls */}
-                                        <div className="flex items-center gap-2 bg-gray-100 rounded-full px-1 py-1">
-                                            <button
-                                                onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
-                                                className="w-7 h-7 flex items-center justify-center bg-white rounded-full shadow-sm text-gray-600 hover:bg-gray-50 transition-colors"
-                                            >
-                                                <Minus size={12} />
-                                            </button>
-                                            <span className="text-sm font-bold w-5 text-center">{item.quantity}</span>
-                                            <button
-                                                onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-                                                className="w-7 h-7 flex items-center justify-center bg-gray-900 text-white rounded-full shadow-sm hover:bg-gray-800 transition-colors"
-                                            >
-                                                <Plus size={12} />
-                                            </button>
-                                        </div>
+                                        {(() => {
+                                            const availableStock = getItemLiveAvailableStock(item, liveProducts);
+                                            const canIncrease = availableStock > item.quantity;
+                                            return (
+                                                <div className="flex items-center gap-2 bg-gray-100 rounded-full px-1 py-1">
+                                                    <button
+                                                        onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                                                        className="w-7 h-7 flex items-center justify-center bg-white rounded-full shadow-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                                                    >
+                                                        <Minus size={12} />
+                                                    </button>
+                                                    <span className="text-sm font-bold w-5 text-center">{item.quantity}</span>
+                                                    <button
+                                                        onClick={() => canIncrease && updateQuantity(item.cartItemId, item.quantity + 1)}
+                                                        disabled={!canIncrease}
+                                                        className="w-7 h-7 flex items-center justify-center bg-gray-900 text-white rounded-full shadow-sm hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        <Plus size={12} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             </div>
@@ -733,12 +799,28 @@ export default function CartPage() {
                             </div>
                         </div>
 
-                        <Link
-                            href="/checkout/address"
-                            className="block w-full text-center bg-gray-900 text-white font-bold py-3.5 rounded-full hover:bg-gray-800 transition-colors"
-                        >
-                            ดำเนินการชำระเงิน
-                        </Link>
+                        {!stockValidation.isAvailable && (
+                            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                                สินค้าไม่เพียงพอหรือหมดแล้ว ({stockValidation.outOfStockNames.join(", ")}) กรุณาปรับจำนวนหรือลบสินค้าออกก่อนชำระเงิน
+                            </div>
+                        )}
+
+                        {stockValidation.isAvailable ? (
+                            <Link
+                                href="/checkout/address"
+                                className="block w-full text-center bg-gray-900 text-white font-bold py-3.5 rounded-full hover:bg-gray-800 transition-colors"
+                            >
+                                ดำเนินการชำระเงิน
+                            </Link>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled
+                                className="block w-full text-center bg-gray-200 text-gray-400 font-bold py-3.5 rounded-full cursor-not-allowed"
+                            >
+                                สินค้าในตะกร้าหมดหรือไม่เพียงพอ
+                            </button>
+                        )}
                     </div>
                 )
             }
